@@ -1,4 +1,5 @@
 import { createSessionStore } from './session-storage.mjs';
+import { horseTrackOptions, isValidHorseRaceSelection } from './race-logic.mjs';
 (() => {
   const $ = id => document.getElementById(id);
   if (typeof io !== 'function') {
@@ -17,12 +18,29 @@ import { createSessionStore } from './session-storage.mjs';
     sessionStore.setItem('lan-session-token', session.token);
     socket.auth.sessionToken = session.token;
   });
-  let state = { players: [], maxPlayers: 12, hostId: null, started: false };
+  let state = { players: [], maxPlayers: 12, hostId: null, started: false, selectedGame: 'alag', trackLength: 18 };
   let pending = false;
+  let selectionDraft = null;
   // The name and server-issued session token are remembered per tab.
   let rememberedName = '';
   try { rememberedName = sessionStore.getItem('lan-player-name') || ''; } catch {}
   $('player-name').value = rememberedName;
+
+  function populateRaceDistances(categoryId, selectedLength) {
+    const select = $('race-length');
+    const options = horseTrackOptions(categoryId);
+    select.replaceChildren(new Option('Замын зайг сонгоно уу', ''));
+    for (const option of options) {
+      select.add(new Option(`${option.kilometers} км · ${option.trackLength} шагай`, String(option.trackLength)));
+    }
+    select.value = selectedLength == null ? '' : String(selectedLength);
+  }
+
+  function settingsMatch(snapshot, draft) {
+    return snapshot.selectedGame === draft.game &&
+      snapshot.trackLength === draft.trackLength &&
+      (draft.game !== 'horse' || snapshot.horseCategory === draft.horseCategory);
+  }
 
   function render() {
     const me = state.players.find(player => player.id === playerId);
@@ -41,14 +59,41 @@ import { createSessionStore } from './session-storage.mjs';
     $('join').textContent = me ? 'Joined' : 'Join Game';
     $('start').hidden = !isHost||state.started;
     $('resume').hidden=!(me&&state.started);
-    $('start').disabled = !socket.connected || pending || state.started;
-    $('game-choice').value = state.selectedGame || 'alag';
-    if(preferredGame && isHost && !state.started && !initialSelectionDone && !pending && socket.connected && state.selectedGame!==preferredGame){initialSelectionDone=true;queueMicrotask(()=>request('lobby:select',{game:preferredGame,trackLength:Number($('race-length').value)||18}));}
-    $('race-length').value = String(state.trackLength || 18);
+    if (preferredGame && isHost && !state.started && !initialSelectionDone && !selectionDraft &&
+        !pending && socket.connected && state.selectedGame !== preferredGame) {
+      selectionDraft = {
+        game: preferredGame,
+        horseCategory: '',
+        trackLength: preferredGame === 'horse' ? null : ([12, 18, 24].includes(state.trackLength) ? state.trackLength : 18)
+      };
+      if (preferredGame === 'alag') {
+        initialSelectionDone = true;
+        const draft = selectionDraft;
+        queueMicrotask(() => request('lobby:select', { game: draft.game, trackLength: draft.trackLength }));
+      }
+    }
+    const settings = selectionDraft || {
+      game: state.selectedGame || 'alag',
+      horseCategory: state.selectedGame === 'horse' ? state.horseCategory || '' : '',
+      trackLength: state.selectedGame === 'horse' ? state.trackLength : null
+    };
+    const horseSelected = settings.game === 'horse';
+    $('game-choice').value = settings.game;
+    $('horse-age-label').hidden = !horseSelected;
+    $('horse-category').hidden = !horseSelected;
+    $('horse-category').value = settings.horseCategory || '';
+    $('race-length-label').hidden = !horseSelected;
+    $('race-length').hidden = !horseSelected;
+    populateRaceDistances(settings.horseCategory, settings.trackLength);
     $('game-choice').disabled = !isHost || !socket.connected || pending || state.started;
-    $('race-length').disabled = !isHost || !socket.connected || pending || state.started || state.selectedGame !== 'horse';
+    $('horse-category').disabled = !isHost || !socket.connected || pending || state.started || !horseSelected;
+    $('race-length').disabled = !isHost || !socket.connected || pending || state.started || !horseSelected || !settings.horseCategory;
+    $('start').disabled = !socket.connected || pending || state.started || settings.game !== state.selectedGame ||
+      (state.selectedGame === 'horse' && !isValidHorseRaceSelection(state.horseCategory, state.trackLength));
     $('status').textContent = state.started
       ? (me?'Your saved game is ready. Return without joining again.':'A game is already in progress.')
+      : horseSelected && (!settings.horseCategory || settings.trackLength == null)
+        ? 'Уралдааны насны ангилал болон яг замын зайг сонгоно уу.'
       : me ? (isHost ? 'You are the host. Start when everyone has joined.' : `Waiting for ${host?.name || 'the host'} to start.`)
         : state.players.length >= state.maxPlayers ? 'The lobby is full.' : 'Enter your name and press Join Game.';
   }
@@ -83,9 +128,15 @@ import { createSessionStore } from './session-storage.mjs';
     const pages = { alag: 'turtle.html?lan=1', horse: 'race.html?lan=1' };
     if (pages[state.selectedGame]) location.replace(pages[state.selectedGame]);
   }
-  socket.on('lobby:state', snapshot => { state = snapshot; if(!state.started&&state.players.some(p=>p.id===playerId))waitingForStart=true; render(); if(waitingForStart)navigateToGame(); });
+  socket.on('lobby:state', snapshot => {
+    state = snapshot;
+    if (selectionDraft && settingsMatch(state, selectionDraft)) selectionDraft = null;
+    if(!state.started&&state.players.some(p=>p.id===playerId))waitingForStart=true;
+    render();
+    if(waitingForStart)navigateToGame();
+  });
   socket.on('disconnect', () => {
-    state = { players: [], maxPlayers: 12, hostId: null, started: false };
+    state = { players: [], maxPlayers: 12, hostId: null, started: false, selectedGame: 'alag', trackLength: 18 };
     pending = false;
     $('connection').textContent = 'Disconnected. Reconnecting… Your seat will be restored automatically.';
     render();
@@ -104,9 +155,31 @@ import { createSessionStore } from './session-storage.mjs';
     if (!$('start').disabled) request('lobby:start');
   });
   function selectGame() {
-    request('lobby:select', { game: $('game-choice').value, trackLength: Number($('race-length').value) });
+    const game = $('game-choice').value;
+    if (game === 'horse') {
+      const horseCategory = $('horse-category').value;
+      const trackLength = Number($('race-length').value);
+      selectionDraft = { game, horseCategory, trackLength: Number.isInteger(trackLength) && trackLength > 0 ? trackLength : null };
+      if (!isValidHorseRaceSelection(horseCategory, trackLength)) {
+        $('error').textContent = 'Морь уралдуулахын тулд насны ангилал, замын зайг сонгоно уу.';
+        render();
+        return;
+      }
+      initialSelectionDone = true;
+      request('lobby:select', { game, horseCategory, trackLength });
+      return;
+    }
+    const trackLength = [12, 18, 24].includes(state.trackLength) ? state.trackLength : 18;
+    selectionDraft = { game, horseCategory: '', trackLength };
+    initialSelectionDone = true;
+    request('lobby:select', { game, trackLength });
   }
-  $('game-choice').addEventListener('change', () => {initialSelectionDone=true;selectGame();});
+  $('game-choice').addEventListener('change', selectGame);
+  $('horse-category').addEventListener('change', () => {
+    selectionDraft = { game: 'horse', horseCategory: $('horse-category').value, trackLength: null };
+    $('error').textContent = '';
+    render();
+  });
   $('race-length').addEventListener('change', selectGame);
   render();
 })();

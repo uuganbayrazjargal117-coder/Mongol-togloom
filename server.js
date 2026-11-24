@@ -5,6 +5,7 @@ const path = require('node:path');
 const { Server } = require('socket.io');
 const { createHorseGame } = require('./horse-game.cjs');
 const { createAlagGame, alagRulesReady } = require('./alag-game.cjs');
+const raceRulesReady = import('./race-logic.mjs');
 
 const { randomUUID } = require('node:crypto');
 const MAX_PLAYERS = 12;
@@ -21,6 +22,7 @@ function createLobbyServer({ horseOptions, alagOptions } = {}) {
   let horseGame = null;
   let selectedGame = 'alag';
   let trackLength = 18;
+  let horseCategory = null;
   const sessions = new Map();
   httpServer.on('close', () => { horseGame?.close(); game?.close(); });
 
@@ -50,6 +52,7 @@ function createLobbyServer({ horseOptions, alagOptions } = {}) {
       maxPlayers: MAX_PLAYERS,
       selectedGame,
       trackLength,
+      horseCategory,
       currentGameId: horseGame?.snapshot().id ?? game?.snapshot().id ?? null,
       started
     };
@@ -100,16 +103,21 @@ function createLobbyServer({ horseOptions, alagOptions } = {}) {
       reply({ ok: true });
     });
 
-    socket.on('lobby:select', (payload, acknowledge) => {
+    socket.on('lobby:select', async (payload, acknowledge) => {
       const reply = typeof acknowledge === 'function' ? acknowledge : () => {};
       if (socket.data.playerId !== hostId || !players.has(socket.data.playerId) || started) {
         return reply({ ok: false, error: 'Only the host can change settings before starting.' });
       }
-      if (!['alag', 'horse'].includes(payload?.game) || ![12, 18, 24].includes(payload?.trackLength)) {
-        return reply({ ok: false, error: 'Choose a valid game and track length.' });
+      const { isValidHorseRaceSelection } = await raceRulesReady;
+      const validSelection = payload?.game === 'horse'
+        ? isValidHorseRaceSelection(payload.horseCategory, payload.trackLength)
+        : payload?.game === 'alag' && [12, 18, 24].includes(payload.trackLength);
+      if (!validSelection) {
+        return reply({ ok: false, error: 'Choose a valid game, horse age category, and distance.' });
       }
       selectedGame = payload.game;
       trackLength = payload.trackLength;
+      horseCategory = selectedGame === 'horse' ? payload.horseCategory : null;
       broadcast();
       reply({ ok: true });
     });
@@ -117,15 +125,21 @@ function createLobbyServer({ horseOptions, alagOptions } = {}) {
     socket.on('lobby:start', async acknowledge => {
       // Load the shared logical catalog before validating/locking this start request.
       const alagRules = selectedGame === 'alag' ? await alagRulesReady : null;
+      const raceRules = selectedGame === 'horse' ? await raceRulesReady : null;
       const reply = typeof acknowledge === 'function' ? acknowledge : () => {};
       if (!players.has(socket.data.playerId) || socket.data.playerId !== hostId) {
         return reply({ ok: false, error: 'Only the lobby host can start the game.' });
       }
       if (started) return reply({ ok: false, error: 'The lobby has already started.' });
+      if (selectedGame === 'horse' && !raceRules.isValidHorseRaceSelection(horseCategory, trackLength)) {
+        return reply({ ok: false, error: 'Choose a valid horse age category and distance before starting.' });
+      }
       started = true;
       const roster = snapshot().players;
       if (selectedGame === 'horse') {
-        horseGame = createHorseGame(roster, trackLength, state => io.emit('horse:state', state), { ...horseOptions, hostId });
+        horseGame = createHorseGame(roster, trackLength, state => io.emit('horse:state', state), {
+          ...horseOptions, hostId, horseCategory
+        });
         for (const p of roster) {
           horseGame.setConnected(p.id, [...io.sockets.sockets.values()].some(s => s.data.playerId === p.id));
         }
@@ -135,7 +149,7 @@ function createLobbyServer({ horseOptions, alagOptions } = {}) {
         for (const p of roster) game.setConnected(p.id, [...io.sockets.sockets.values()].some(s => s.data.playerId === p.id));
         io.emit('game:state', game.snapshot());
       }
-      io.emit('lobby:started', { selectedGame, gameId: horseGame?.snapshot().id ?? game.snapshot().id });
+      io.emit('lobby:started', { selectedGame, gameId: horseGame?.snapshot().id ?? game.snapshot().id, horseCategory, trackLength });
       broadcast();
       reply({ ok: true });
     });
@@ -143,6 +157,7 @@ function createLobbyServer({ horseOptions, alagOptions } = {}) {
     socket.on('game:switch', async (payload, acknowledge) => {
       const reply = typeof acknowledge === 'function' ? acknowledge : () => {};
       const rules = payload?.targetGame === 'alag' ? await alagRulesReady : null;
+      const raceRules = payload?.targetGame === 'horse' ? await raceRulesReady : null;
       if (!socket.connected || !players.has(socket.data.playerId) || socket.data.playerId !== hostId) {
         return reply({ ok: false, error: 'Only the host can switch games.' });
       }
@@ -151,28 +166,32 @@ function createLobbyServer({ horseOptions, alagOptions } = {}) {
         return reply({ ok: false, error: 'This switch request is stale or there is no active game.' });
       }
       if (!['alag', 'horse'].includes(payload.targetGame) || payload.targetGame === selectedGame ||
-          Object.keys(payload).some(key => !['gameId', 'targetGame', 'trackLength'].includes(key)) ||
-          (payload.targetGame === 'horse' && ![12, 18, 24].includes(payload.trackLength)) ||
-          (payload.trackLength !== undefined && ![12, 18, 24].includes(payload.trackLength)) || players.size < 2) {
-        return reply({ ok: false, error: 'Choose another valid game and track length with at least two joined players.' });
+          Object.keys(payload).some(key => !['gameId', 'targetGame', 'trackLength', 'horseCategory'].includes(key)) ||
+          (payload.targetGame === 'horse' && !raceRules.isValidHorseRaceSelection(payload.horseCategory, payload.trackLength)) ||
+          (payload.targetGame === 'alag' && payload.horseCategory != null) ||
+          (payload.targetGame === 'alag' && payload.trackLength !== undefined && ![12, 18, 24].includes(payload.trackLength)) ||
+          players.size < 2) {
+        return reply({ ok: false, error: 'Choose another valid game, age category, and distance with at least two joined players.' });
       }
       const previousGameId = active.snapshot().id;
-      const target = payload.targetGame, length = payload.trackLength ?? trackLength;
+      const target = payload.targetGame;
+      const length = payload.trackLength ?? (target === 'horse' ? 20 : 18);
+      const targetHorseCategory = target === 'horse' ? payload.horseCategory : null;
       const roster = snapshot().players;
       let replacement;
       const publish = state => {
         if ((target === 'horse' ? horseGame : game) === replacement) io.emit(target === 'horse' ? 'horse:state' : 'game:state', state);
       };
       replacement = target === 'horse'
-        ? createHorseGame(roster, length, publish, { ...horseOptions, hostId })
+        ? createHorseGame(roster, length, publish, { ...horseOptions, hostId, horseCategory: targetHorseCategory })
         : createAlagGame(roster, publish, rules, { ...alagOptions, hostId });
       for (const p of roster) replacement.setConnected(p.id, [...io.sockets.sockets.values()].some(s => s.data.playerId === p.id));
       replacement.restart(); // Fresh state, first connected seat; no premature candidate broadcasts.
       active.close(); game = null; horseGame = null;
-      selectedGame = target; trackLength = length;
+      selectedGame = target; trackLength = length; horseCategory = targetHorseCategory;
       if (target === 'horse') horseGame = replacement; else game = replacement;
       const state = replacement.snapshot();
-      io.emit('game:switched', { previousGameId, gameId: state.id, targetGame: target, trackLength });
+      io.emit('game:switched', { previousGameId, gameId: state.id, targetGame: target, trackLength, horseCategory });
       io.emit(target === 'horse' ? 'horse:state' : 'game:state', state);
       broadcast();
       reply({ ok: true, gameId: state.id });

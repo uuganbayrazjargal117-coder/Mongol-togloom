@@ -8,13 +8,15 @@ function createHorseGame(roster, trackLength, publish, {
   randomFace = () => randomInt(0, 4),
   animationMs = ANIMATION_MS,
   disconnectGraceMs = 15000,
-  hostId = roster[0].id
+  hostId = roster[0].id,
+  horseCategory
 } = {}) {
   const initialState = () => ({
     id: randomUUID(), hostId, gameType: 'horse', started: true, finished: false,
     endReason: null,
     players: roster.map(p => ({ ...p, connected: true, position: 0, finished: false, hasThrown: false, facingForward: false })),
-    trackLength, currentPlayerId: roster[0].id, currentSeat: roster[0].seat,
+    horseCategory, distanceKm: trackLength / 2, trackLength,
+    currentPlayerId: roster[0].id, currentSeat: roster[0].seat,
     turnNumber: 1, phase: 'ready', faces: [], lastThrow: null,
     ranking: [], winnerId: null
   });

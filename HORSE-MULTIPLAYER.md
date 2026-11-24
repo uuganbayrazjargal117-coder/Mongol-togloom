@@ -2,11 +2,13 @@
 
 For persistent resume and host-only synchronized restart, see MULTIPLAYER-RELIABILITY.md.
 
-The existing shared lobby now starts either Alag Melkhii or Horse Racing. The first joiner is host. Only the host may change the selected game or choose a Horse Racing track length of 12, 18 or 24 before starting. Everyone sees the server-approved settings. Start broadcasts the selected game and game ID. The browser maps the approved game ID to a fixed local page, never a client-provided redirect.
+The existing shared lobby now starts either Alag Melkhii or Horse Racing. The first joiner is host. Before starting Horse Racing, the host selects one of the six Mongolian age categories and an exact kilometer distance from that category's range. The server validates the category/distance pair and converts kilometers to twice as many track spaces. Everyone sees the same server-approved selection. Start broadcasts the selected game and game ID. The browser maps the approved game ID to a fixed local page, never a client-provided redirect.
+
+The categories are Азарга (22–24 km), Их нас (24–26 km), Соёолон (18–20 km), Хязаалан (15–17 km), Шүдлэн (12–14 km), and Даага (10–12 km). The distance selector offers every whole kilometer in the selected range; no distance is silently selected. Long tracks use a smooth curved route with one marker per space, consistent one-space spacing, matching horse lanes, and camera framing based on the selected route.
 
 ## Server authority and existing rules
 
-`horse-game.cjs` stores only plain logical state: game ID/type, names/IDs/seats, connection status, current player and seat, turn number, track length, positions, whether each racer has thrown and faces forward, finished racers, four shagai faces, last throw/movement, animation phase, ranking, winner and started/finished flags. Three.js objects remain browser-side.
+`horse-game.cjs` stores only plain logical state: game ID/type, names/IDs/seats, connection status, current player and seat, turn number, age category, distance in kilometers and track spaces, positions, whether each racer has thrown and faces forward, finished racers, four shagai faces, last throw/movement, animation phase, ranking, winner and started/finished flags. Three.js objects remain browser-side.
 
 The browser sends `horse:throw` with the current game ID and turn number. The server uses the socket's restored session identity, verifies membership, connection, current turn and phase, and ignores client-supplied faces, movement, position, seat or ranking. Accepted requests lock the turn immediately. Replays of previous turn numbers and duplicate requests during animation are rejected.
 
@@ -18,7 +20,7 @@ The v3 proverb dialog markup exists, but this workspace has no question text, an
 
 Seat 1 (the lowest occupied seat if the lobby has gaps) starts. A 4-second server animation window covers the existing 2650ms throw and 800ms movement plus margin. Then the server advances to the next connected, unfinished racer. Clients cannot advance the turn or hold the race up by withholding an animation acknowledgement. A delayed/background browser catches up from snapshots before enabling its controls.
 
-When a position reaches the finish, the server marks that racer finished and appends its ID to ranking once. The first finisher is the winner. Remaining racers continue; finished racers are skipped. The race finishes when every racer has finished. All clients display the same positions and ordered ranking.
+When a position reaches the finish, the server marks that racer finished and appends its ID to ranking once. The first finisher is the winner and is prominently announced as Түрүү магнай. Finishers receive the requested traditional titles in order: Түрүү магнай, Аман хүзүү, Айргийн гурав/дөрөв/тав, then Цулбуурын зургаа and later Mongolian number names. Remaining racers continue; finished racers are skipped. The Даага баян ходоод message is shown only when the last actual racer finishes and the full race is complete. All clients display the same positions and ordered ranking.
 
 ## Identity, camera and disconnects
 
@@ -32,10 +34,10 @@ Disconnect status is broadcast immediately. An idle current player gets up to 15
 
 1. Open a terminal in `Mongol togloom 2/Alag-Melhii`. Run `npm install`, then `npm start` (or `npm.cmd` in Windows PowerShell if required). Open `http://localhost:3000/lobby.html`.
 2. Join as Azaa. Open a separate private browser window or another browser at the same URL and join as Bat. Confirm names/seats match and only Azaa has Start Game and enabled settings.
-3. On Azaa, choose **Морь уралдуулах** and track **12**. Confirm Bat immediately sees the same settings and cannot change them. Track options 18 and 24 should also synchronize before starting.
+3. On Azaa, choose **Морь уралдуулах**, select an age category and one of its exact distances (for example **Даага · 10 км · 20 шагай**). Confirm Bat immediately sees the same settings and cannot change them. Try each category to verify only its matching kilometer choices are available.
 4. Press Start Game on Azaa. Both should enter `race.html?lan=1`, show the same track and seats, mark the local player as You, and show Seat 1's turn. There is no second join or local setup dialog.
 5. Only Seat 1's throw button should be enabled. Throw and confirm both screens animate the same four faces and move the same racer by the same amount. After about four seconds, the next player can throw. Try rapid double clicks; only one throw is accepted.
-6. Continue to the finish. Confirm four distinct faces advance four spaces, no racer goes past the finish, finished racers stop taking turns, and both clients show the same final ranking.
+6. Continue to the finish. Confirm four distinct faces advance four spaces, no racer goes past the finish, finished racers stop taking turns, and both clients show the same traditional finish titles, Түрүү магнай announcement and final Даага message.
 7. Refresh one race page mid-race. Confirm identity, seat and positions are retained. Close the current player's tab while idle; the other player should gain the turn after the reconnect grace period. Reopen the same session to recover the offline racer. Temporarily disconnect/reconnect to check offline status and recovery.
 8. Enable the camera, grant permission and perform a throw gesture on the current player. It should behave like the button. A gesture on the other player must not throw.
 9. Restart the Node server and return both browsers to the lobby for a new game. Choose **Алаг мэлхий**, start, and confirm the existing synchronized dice/highlighting still works. Direct `race.html` without `?lan=1` retains the original local game setup and rules.

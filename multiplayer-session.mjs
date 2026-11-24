@@ -1,4 +1,5 @@
 import { createSessionStore } from './session-storage.mjs';
+import { isValidHorseRaceSelection } from './race-logic.mjs';
 // Shared session/readiness and generation handling; game rules remain on the server.
 export function createMultiplayerSession(config, view, {
   ioFactory = globalThis.io, storage = createSessionStore(),
@@ -13,7 +14,7 @@ export function createMultiplayerSession(config, view, {
   let applying = false, displayError = false, applied = null, queued = null, pending = null, restartPending = null;
   let seenGame = null, seenSequence = 0, activeAnimation = null, connectionRevision = 0;
   const retiredGames = new Set();
-  let transitioning = false, switchPending = null, partyTrackLength = 18;
+  let transitioning = false, switchPending = null, partyTrackLength = 18, partyHorseCategory = null, partyAlagTrackLength = 18;
   const readiness = () => ({ threeReady, sessionReady, socketReady: socket.connected, gameStateReady: Boolean(state), stateApplied: applied === state });
   const canAct = () => Boolean(threeReady && sessionReady && socket.connected && state && applied === state &&
     !transitioning && !switchPending && !applying && !pending && !restartPending && !displayError && !state.finished && state.currentPlayerId === playerId &&
@@ -114,6 +115,8 @@ export function createMultiplayerSession(config, view, {
   });
   socket.on('lobby:state', lobby => {
     partyTrackLength = lobby.trackLength ?? partyTrackLength;
+    if (lobby.selectedGame === 'horse') partyHorseCategory = lobby.horseCategory ?? partyHorseCategory;
+    else if ([12, 18, 24].includes(lobby.trackLength)) partyAlagTrackLength = lobby.trackLength;
     hostId = lobby.hostId; render();
     if (lobby.started && lobby.selectedGame !== config.gameType && sessionReady && lobby.players?.some(p => p.id === playerId)) {
       enterGame(lobby.selectedGame, lobby.currentGameId); return;
@@ -139,12 +142,22 @@ export function createMultiplayerSession(config, view, {
   }
   return {
     canAct, canRestart, canSwitch, request, readiness,
-    switchSettings: () => ({ gameType: config.gameType, trackLength: state?.trackLength ?? partyTrackLength }),
-    requestSwitch(targetGame, trackLength) {
-      if (!canSwitch() || !['alag', 'horse'].includes(targetGame) || targetGame === config.gameType || ![12,18,24].includes(trackLength)) return false;
+    switchSettings: () => ({
+      gameType: config.gameType,
+      trackLength: state?.trackLength ?? partyTrackLength,
+      horseCategory: state?.horseCategory ?? partyHorseCategory,
+      alagTrackLength: [12, 18, 24].includes(partyAlagTrackLength) ? partyAlagTrackLength : 18
+    }),
+    requestSwitch(targetGame, trackLength, horseCategory) {
+      const validSettings = targetGame === 'horse'
+        ? isValidHorseRaceSelection(horseCategory, trackLength)
+        : targetGame === 'alag' && [12, 18, 24].includes(trackLength);
+      if (!canSwitch() || !['alag', 'horse'].includes(targetGame) || targetGame === config.gameType || !validSettings) return false;
       const requestToken = { gameId: state.id, connectionRevision };
       switchPending = requestToken; render();
-      socket.timeout(5000).emit('game:switch', { gameId: state.id, targetGame, trackLength }, (error, response) => {
+      const payload = { gameId: state.id, targetGame, trackLength };
+      if (targetGame === 'horse') payload.horseCategory = horseCategory;
+      socket.timeout(5000).emit('game:switch', payload, (error, response) => {
         if (transitioning || switchPending !== requestToken || state.id !== requestToken.gameId || connectionRevision !== requestToken.connectionRevision) return;
         switchPending = null; render();
         if (error || !response?.ok) view.onStatus(response?.error || 'The server did not respond. Check your connection.');

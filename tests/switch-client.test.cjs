@@ -20,9 +20,13 @@ for (const type of ['alag', 'horse']) test(type + ' switch cancels old client wo
   const event = type === 'alag' ? 'game:state' : 'horse:state', target = type === 'alag' ? 'horse' : 'alag';
   socket.receive('session', { playerId: 'a', token: 'token' }); socket.receive(event, state); client.ready(); await tick();
   socket.receive(event, { ...state, rolled: 3, rollSequence: 1, phase: 'animating', lastThrow: { sequence: 1 } }); await tick();
-  assert.equal(client.canSwitch(), true); assert.equal(client.requestSwitch(target, 12), true);
+  assert.equal(client.canSwitch(), true);
+  assert.equal(client.requestSwitch(target, target === 'horse' ? 20 : 12, target === 'horse' ? 'daaga' : undefined), true);
   const ack = socket.requests[0][2];
-  assert.deepEqual(socket.requests[0][1], { gameId: 'old', targetGame: target, trackLength: 12 });
+  assert.deepEqual(socket.requests[0][1], {
+    gameId: 'old', targetGame: target, trackLength: target === 'horse' ? 20 : 12,
+    ...(target === 'horse' ? { horseCategory: 'daaga' } : {})
+  });
   socket.receive('game:switched', { previousGameId: 'old', gameId: 'new', targetGame: target });
   const page = target === 'horse' ? 'race.html?lan=1' : 'turtle.html?lan=1';
   assert.deepEqual(paths, [page]); assert.equal(client.canRestart(), false); assert.equal(client.canSwitch(), false);
@@ -44,16 +48,34 @@ test('restoring an obsolete game page redirects to the server-confirmed current 
   assert.equal(socket.requests.length, 0);
 });
 
-test('switch dialog cancel does not send; confirmation requests a selected game/track', async () => {
+test('switch dialog requires a horse category/distance and sends the selected settings', async () => {
   const { mountGameSwitch } = await import('../game-switch-ui.mjs');
   const elements = new Map(), sent = [], confirmations = [];
-  const doc = { getElementById(id) { if (!elements.has(id)) elements.set(id, { options: [{ value: 'alag' }, { value: 'horse' }], showModal() { this.open = true; }, close() { this.open = false; } }); return elements.get(id); } };
+  const doc = {
+    createElement() { return { textContent: '', value: '', setAttribute() {} }; },
+    getElementById(id) {
+      if (!elements.has(id)) elements.set(id, {
+        options: id === 'switch-target' ? [{ value: 'alag' }, { value: 'horse' }] : [],
+        replaceChildren(...options) { this.options = options; this.value = options[0]?.value || ''; },
+        add(option) { this.options.push(option); },
+        append(child) { elements.set(child.id, child); },
+        showModal() { this.open = true; }, close() { this.open = false; }
+      });
+      return elements.get(id);
+    }
+  };
   let confirm = false;
-  mountGameSwitch({ canSwitch: () => true, switchSettings: () => ({ gameType: 'alag', trackLength: 24 }), requestSwitch: (...args) => { sent.push(args); return true; } },
+  mountGameSwitch({ canSwitch: () => true, switchSettings: () => ({ gameType: 'alag', trackLength: 24, horseCategory: null, alagTrackLength: 24 }), requestSwitch: (...args) => { sent.push(args); return true; } },
     doc, message => { confirmations.push(message); return confirm; });
   doc.getElementById('switch-game').onclick(); assert.equal(doc.getElementById('switch-target').value, 'horse');
   doc.getElementById('switch-cancel').onclick(); assert.equal(sent.length, 0);
   doc.getElementById('switch-game').onclick(); doc.getElementById('switch-confirm').onclick(); assert.equal(sent.length, 0);
-  confirm = true; doc.getElementById('switch-length').value = '12'; doc.getElementById('switch-confirm').onclick();
-  assert.deepEqual(sent, [['horse', 12]]); assert.match(confirmations.at(-1), /Алаг мэлхий/); assert.match(confirmations.at(-1), /Морь уралдуулах/);
+  assert.equal(doc.getElementById('switch-error').textContent, 'Насны ангилал болон замын зайг сонгоно уу.');
+  confirm = true;
+  doc.getElementById('switch-category').value = 'daaga';
+  doc.getElementById('switch-category').onchange();
+  doc.getElementById('switch-distance').value = '20';
+  doc.getElementById('switch-confirm').onclick();
+  assert.deepEqual(sent, [['horse', 20, 'daaga']]);
+  assert.match(confirmations.at(-1), /Алаг мэлхий/); assert.match(confirmations.at(-1), /Морь уралдуулах/);
 });

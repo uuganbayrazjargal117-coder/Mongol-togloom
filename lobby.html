@@ -14,18 +14,24 @@
     <h1>Multiplayer Lobby</h1>
     <p>Share this website URL to join from any network. The first player to join is the lobby host.</p>
     <fieldset id="game-settings">
-      <legend>Choose Game · Host settings</legend>
-      <label for="game-choice">Game</label>
+      <legend>Тоглоомын тохиргоо · Зөвхөн хөтлөгч</legend>
+      <label for="game-choice">Тоглоом</label>
       <select id="game-choice" disabled>
         <option value="alag">🐢 Алаг мэлхий</option>
         <option value="horse">🐎 Морь уралдуулах</option>
       </select>
-      <label for="race-length">Horse Racing track length</label>
-      <select id="race-length" disabled>
-        <option value="12">12</option>
-        <option value="18" selected>18</option>
-        <option value="24">24</option>
+      <label id="horse-age-label" for="horse-category" hidden>Морины нас</label>
+      <select id="horse-category" disabled hidden>
+        <option value="">Насны ангиллаа сонгоно уу</option>
+        <option value="azarga">Азарга · 22–24 км</option>
+        <option value="ikh-nas">Их нас · 24–26 км</option>
+        <option value="soyolon">Соёолон · 18–20 км</option>
+        <option value="hyzaalan">Хязаалан · 15–17 км</option>
+        <option value="shudlen">Шүдлэн · 12–14 км</option>
+        <option value="daaga">Даага · 10–12 км</option>
       </select>
+      <label id="race-length-label" for="race-length" hidden>Замын зай</label>
+      <select id="race-length" disabled hidden><option value="">Насны ангилал, зайг сонгоно уу</option></select>
     </fieldset>
     <form id="join-form">
       <label for="player-name">Player name</label>

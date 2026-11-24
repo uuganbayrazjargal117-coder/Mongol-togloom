@@ -25,7 +25,7 @@ Commit the server, package.json, package-lock.json, browser files, vendor files,
 ## Public verification after you deploy
 
 1. Open https://YOUR-SERVICE.onrender.com on each device. Use the same domain on home Wi-Fi, a different Wi-Fi, and mobile data.
-2. Choose Multiplayer Lobby or open /lobby.html; join with different names. The first joiner is host and can select Alag Melkhii or Horse Racing. Only the host can choose the Horse Racing track length (12, 18 or 24).
+2. Choose Multiplayer Lobby or open /lobby.html; join with different names. The first joiner is host and can select Alag Melkhii or Horse Racing. For Horse Racing, the host selects an age category and an exact kilometer distance from its offered range; all clients receive the same validated category and track.
 3. Start on the host. All joined tabs should navigate to /turtle.html?lan=1 or /race.html?lan=1 for the server-selected game, retaining names and seats. Seat 1 is current; other players cannot throw.
 4. In Alag Melkhii, roll on Seat 1, take a highlighted group and check matching board removal, score updates and the next turn. Continue through automatic return/elimination and the final result; see ALAG-MULTIPLAYER.md. In Horse Racing, check matching four-shagai results, movement, turns and final ranking; see HORSE-MULTIPLAYER.md.
 5. Refresh a game page and briefly interrupt a connection to verify session restoration. In browser Network tools, Socket.IO polling uses HTTPS and WebSocket upgrades use WSS, with no mixed-content requests.

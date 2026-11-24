@@ -12,8 +12,10 @@ function next(s, event, predicate = () => true) {
     s.on(event, listener);
   });
 }
-async function fixture(t, type, length = 18, options = {}) {
-  const server = createLobbyServer({ horseOptions: { randomFace: () => 0, animationMs: 60, disconnectGraceMs: 60 }, alagOptions: { randomDie: () => 3, disconnectGraceMs: 60 }, ...options });
+async function fixture(t, type, length, options = {}) {
+  const { horseCategory = 'daaga', ...serverOptions } = options;
+  const trackLength = length ?? (type === 'horse' ? 20 : 18);
+  const server = createLobbyServer({ horseOptions: { randomFace: () => 0, animationMs: 60, disconnectGraceMs: 60 }, alagOptions: { randomDie: () => 3, disconnectGraceMs: 60 }, ...serverOptions });
   const clients = []; const event = type === 'alag' ? 'game:state' : 'horse:state';
   t.after(async () => { clients.forEach(s => s.disconnect()); await new Promise(r => server.io.close(r)); });
   await new Promise(r => server.httpServer.listen(0, '127.0.0.1', r));
@@ -26,7 +28,10 @@ async function fixture(t, type, length = 18, options = {}) {
   }
   const host = await client(), guest = await client();
   await emit(host, 'lobby:join', { name: 'Host' }); await emit(guest, 'lobby:join', { name: 'Guest' });
-  await emit(host, 'lobby:select', { game: type, trackLength: length });
+  await emit(host, 'lobby:select', {
+    game: type, trackLength,
+    ...(type === 'horse' ? { horseCategory } : {})
+  });
   const both = next(guest, event); await host.timeout(3000).emitWithAck('lobby:start'); await both;
   return { host, guest, client, event };
 }
@@ -57,14 +62,15 @@ test('Alag host-only restart resets a completed game; old roll/selection/restart
   const refreshed = await client(token); assert.equal(refreshed.session.playerId, guest.session.playerId); assert.deepEqual(refreshed.state, reset);
 });
 
-for (const length of [12, 18, 24]) test('Horse host restart during throw preserves track ' + length + ', identities and invalidates old timers', async t => {
-  const { host, guest, event, client } = await fixture(t, 'horse', length);
+for (const [horseCategory, length] of [['daaga', 20], ['soyolon', 36], ['ikh-nas', 52]]) test('Horse host restart during throw preserves track ' + length + ', identities and invalidates old timers', async t => {
+  const { host, guest, event, client } = await fixture(t, 'horse', length, { horseCategory });
   const roster = identities(host.state), token = guest.session.token, old = structuredClone(host.state);
   assert.equal((await emit(host, 'horse:throw', action(old))).ok, true); assert.equal(host.state.players[0].position, 3);
   assert.equal((await emit(guest, 'game:restart', { gameId: old.id })).ok, false);
   const received = next(guest, event, s => s.id !== old.id);
   assert.equal((await emit(host, 'game:restart', { gameId: old.id })).ok, true);
   const reset = await received; assert.deepEqual(identities(reset), roster); assert.equal(reset.trackLength, length);
+  assert.equal(reset.horseCategory, horseCategory); assert.equal(reset.distanceKm, length / 2);
   assert.ok(reset.players.every(p => p.position === 0 && !p.finished));
   assert.deepEqual(reset.ranking, []); assert.deepEqual(reset.faces, []); assert.equal(reset.lastThrow, null);
   assert.equal(reset.winnerId, null); assert.equal(reset.finished, false); assert.equal(reset.currentSeat, 0);
@@ -91,8 +97,8 @@ test('Alag close/rejoin preserves seat and pending state; an offline current tur
 });
 
 test('Horse restart clears a nonempty final ranking and winner', async t => {
-  const { host, guest, event } = await fixture(t, 'horse', 12);
-  for (let i = 0; i < 8; i++) {
+  const { host, guest, event } = await fixture(t, 'horse', 20);
+  for (let i = 0; i < 12; i++) {
     const actor = i % 2 ? guest : host;
     if (actor.state.phase !== 'ready') await next(actor, event, s => s.phase === 'ready');
     const peer = next(actor === host ? guest : host, event, s => s.phase === 'animating');

@@ -1,3 +1,67 @@
+export const HORSE_AGE_CATEGORIES = Object.freeze([
+  { id: 'azarga', name: 'Азарга', minKm: 22, maxKm: 24 },
+  { id: 'ikh-nas', name: 'Их нас', minKm: 24, maxKm: 26 },
+  { id: 'soyolon', name: 'Соёолон', minKm: 18, maxKm: 20 },
+  { id: 'hyzaalan', name: 'Хязаалан', minKm: 15, maxKm: 17 },
+  { id: 'shudlen', name: 'Шүдлэн', minKm: 12, maxKm: 14 },
+  { id: 'daaga', name: 'Даага', minKm: 10, maxKm: 12 }
+].map(Object.freeze));
+
+const placeNumbers = Object.freeze([
+  '', '', '', 'гурав', 'дөрөв', 'тав', 'зургаа', 'долоо',
+  'найм', 'ес', 'арав', 'арван нэг', 'арван хоёр'
+]);
+
+export function horseTrackOptions(categoryId) {
+  const category = HORSE_AGE_CATEGORIES.find(item => item.id === categoryId);
+  if (!category) return [];
+  return Array.from({ length: category.maxKm - category.minKm + 1 }, (_, index) => {
+    const kilometers = category.minKm + index;
+    return { kilometers, trackLength: kilometers * 2 };
+  });
+}
+
+export function isValidHorseRaceSelection(categoryId, trackLength) {
+  return Number.isInteger(trackLength) &&
+    horseTrackOptions(categoryId).some(option => option.trackLength === trackLength);
+}
+
+export function finishTitle(place) {
+  if (place === 1) return 'Түрүү магнай';
+  if (place === 2) return 'Аман хүзүү';
+  if (place >= 3 && place <= 5) return `Айргийн ${placeNumbers[place]}`;
+  if (place >= 6 && place <= 12) return `Цулбуурын ${placeNumbers[place]}`;
+  return null;
+}
+
+export function foalLastPlaceAnnouncement(categoryId, finishOrder, playerCount, raceFinished) {
+  if (categoryId !== 'daaga' || !raceFinished || playerCount < 1 ||
+      !Array.isArray(finishOrder) || finishOrder.length !== playerCount ||
+      new Set(finishOrder).size !== playerCount) return null;
+  return 'Энэ тоглолтын баян ходоод, ирэх тоглолтын түрүү магнай!';
+}
+
+export function buildHorseTrackPath(length, spacing = 1) {
+  if (!Number.isInteger(length) || length < 1 || !Number.isFinite(spacing) || spacing <= 0) {
+    throw new RangeError('Track length and spacing must be positive.');
+  }
+  const bend = length > 24 ? Math.min(0.32, 0.12 + (length - 24) * 0.005) : 0;
+  const points = [{ x: 0, z: 0 }];
+  for (let step = 1; step <= length; step++) {
+    const angle = bend * Math.sin(2 * Math.PI * (step - 0.5) / length);
+    const previous = points[step - 1];
+    points.push({
+      x: previous.x + spacing * Math.cos(angle),
+      z: previous.z + spacing * Math.sin(angle)
+    });
+  }
+  const centerX = (points[0].x + points[length].x) / 2;
+  const minZ = Math.min(...points.map(point => point.z));
+  const maxZ = Math.max(...points.map(point => point.z));
+  const centerZ = (minZ + maxZ) / 2;
+  return points.map(point => ({ x: point.x - centerX, z: point.z - centerZ }));
+}
+
 export function advance(horse,faces,length){
  const horses=faces.filter(x=>x===0).length;
  const different=new Set(faces).size===4;

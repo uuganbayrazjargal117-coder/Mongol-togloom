@@ -36,24 +36,28 @@ test('party switches both directions with new generations, fresh state, preserve
   const roster = identities(host.alag), original = host.alag.id, tokens = [host, guest, third].map(s => s.session.token);
   for (const bad of [
     { gameId: original, targetGame: 'bogus', trackLength: 12 },
-    { gameId: original, targetGame: 'horse', trackLength: 13 },
-    { gameId: 'stale', targetGame: 'horse', trackLength: 12 },
-    { gameId: original, targetGame: 'horse', trackLength: 12, players: [{ id: 'forged', seat: 0 }] },
-    { gameId: original, targetGame: 'horse', trackLength: 12, hostId: guest.session.playerId },
-    { gameId: original, targetGame: 'horse', trackLength: 12, seats: [99] },
+    { gameId: original, targetGame: 'horse', trackLength: 20 },
+    { gameId: original, targetGame: 'horse', horseCategory: 'unknown', trackLength: 20 },
+    { gameId: original, targetGame: 'horse', horseCategory: 'daaga', trackLength: 18 },
+    { gameId: 'stale', targetGame: 'horse', horseCategory: 'daaga', trackLength: 20 },
+    { gameId: original, targetGame: 'horse', horseCategory: 'daaga', trackLength: 20, players: [{ id: 'forged', seat: 0 }] },
+    { gameId: original, targetGame: 'horse', horseCategory: 'daaga', trackLength: 20, hostId: guest.session.playerId },
+    { gameId: original, targetGame: 'horse', horseCategory: 'daaga', trackLength: 20, seats: [99] },
     { gameId: original, targetGame: 'alag', trackLength: 12 }
   ]) assert.equal((await emit(host, 'game:switch', bad)).ok, false);
-  assert.equal((await emit(guest, 'game:switch', { gameId: original, targetGame: 'horse', trackLength: 12 })).ok, false);
+  assert.equal((await emit(guest, 'game:switch', { gameId: original, targetGame: 'horse', horseCategory: 'daaga', trackLength: 20 })).ok, false);
   // Dirty the old board before switching.
   await emit(host, 'game:roll', action(host.alag));
   const oldAction = { ...action(host.alag), groupId: 'head' };
   await emit(host, 'game:select', oldAction);
   assert.equal(host.alag.players[0].score, 3);
   const switched = [host, guest, third].map(s => next(s, 'game:switched'));
-  assert.equal((await emit(host, 'game:switch', { gameId: original, targetGame: 'horse', trackLength: 12 })).ok, true);
+  assert.equal((await emit(host, 'game:switch', { gameId: original, targetGame: 'horse', horseCategory: 'daaga', trackLength: 20 })).ok, true);
   const messages = await Promise.all(switched); assert.deepEqual(messages[0], messages[1]); assert.deepEqual(messages[1], messages[2]);
+  assert.equal(messages[0].horseCategory, 'daaga'); assert.equal(messages[0].trackLength, 20);
   const horse = host.horse; assert.notEqual(horse.id, original); assert.deepEqual(identities(horse), roster);
-  assert.equal(horse.hostId, roster[0].id); assert.equal(horse.trackLength, 12); assert.equal(horse.currentSeat, 0);
+  assert.equal(horse.hostId, roster[0].id); assert.equal(horse.trackLength, 20);
+  assert.equal(horse.horseCategory, 'daaga'); assert.equal(horse.distanceKm, 10); assert.equal(horse.currentSeat, 0);
   assert.ok(horse.players.every(p => p.position === 0 && !p.finished)); assert.deepEqual(horse.ranking, []);
   assert.deepEqual(horse.faces, []); assert.equal(horse.lastThrow, null); assert.equal(horse.winnerId, null);
   assert.equal((await emit(host, 'game:select', oldAction)).ok, false);
@@ -80,7 +84,8 @@ test('offline party member resumes the new game, same seat/token; old disconnect
   const { host, third, client } = await fixture(t);
   const token = third.session.token, id = third.session.playerId, oldId = host.alag.id;
   third.disconnect(); await wait(10);
-  await emit(host, 'game:switch', { gameId: oldId, targetGame: 'horse', trackLength: 24 });
+  await emit(host, 'game:switch', { gameId: oldId, targetGame: 'horse', horseCategory: 'soyolon', trackLength: 36 });
+  assert.equal(host.horse.horseCategory, 'soyolon'); assert.equal(host.horse.distanceKm, 18);
   assert.equal(host.horse.players[2].connected, false); const fresh = structuredClone(host.horse);
   await wait(120); assert.deepEqual(host.horse, fresh);
   const resumed = await client(token); assert.equal(resumed.session.playerId, id); assert.equal(resumed.horse.id, fresh.id);
@@ -91,5 +96,5 @@ test('offline party member resumes the new game, same seat/token; old disconnect
 
 test('switch requires at least two joined party members', async t => {
   const { host } = await fixture(t, 1);
-  assert.equal((await emit(host, 'game:switch', { gameId: host.alag.id, targetGame: 'horse', trackLength: 12 })).ok, false);
+  assert.equal((await emit(host, 'game:switch', { gameId: host.alag.id, targetGame: 'horse', horseCategory: 'daaga', trackLength: 20 })).ok, false);
 });

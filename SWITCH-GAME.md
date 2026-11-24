@@ -2,8 +2,8 @@
 
 The host now has two distinct controls in both multiplayer game pages:
 
-- **Шинээр эхлэх** resets the same game with the same party and, for Horse Racing, track length.
-- **Тоглоом солих** opens game/track selection, confirms ending the current game, and creates a fresh game of the other type. Cancel does nothing.
+- **Шинээр эхлэх** resets the same game with the same party and, for Horse Racing, the selected age category and distance.
+- **Тоглоом солих** opens game settings, confirms ending the current game, and creates a fresh game of the other type. Switching to Horse Racing requires an age category and exact distance; cancel does nothing.
 
 No automatic deployment or new Render service is performed.
 
@@ -11,9 +11,9 @@ No automatic deployment or new Render service is performed.
 
 The existing server player map, assigned seats, host ID and session-token map are the persistent party for the lifetime of the server. Switching replaces only the active game object. Disconnected members remain in the party under the existing policy. Their tokens remain valid and no new players are created.
 
-`game:switch` accepts only the active game ID, `targetGame` (`alag` or `horse`) and optional track configuration. The server verifies the connected session belongs to the party host, the request matches the current generation, there are at least two joined players (including retained offline members), and the target differs from the current game. Horse Racing requires a numeric 12/18/24 length. Unknown/forged player lists, seats, host identities, redirect fields and invalid settings are rejected. The roster comes exclusively from the server party map.
+`game:switch` accepts only the active game ID, `targetGame` (`alag` or `horse`) and valid target settings. The server verifies the connected session belongs to the party host, the request matches the current generation, there are at least two joined players (including retained offline members), and the target differs from the current game. Horse Racing requires a valid category/distance pair from the shared age-range table. Unknown/forged player lists, seats, host identities, redirect fields and invalid settings are rejected. The roster comes exclusively from the server party map.
 
-The replacement state is initialized without publishing intermediate snapshots, with connection status synchronized from live sockets and the first connected seat selected. The previous game is closed, its timers canceled and object removed from active routing. The server broadcasts `game:switched`, the new authoritative state and updated lobby/current-game metadata. Every new game has a new random UUID.
+The replacement state is initialized without publishing intermediate snapshots, with connection status synchronized from live sockets and the first connected seat selected. Horse Racing stores and broadcasts category, kilometer distance and space count for reconnects and rendering. The previous game is closed, its timers canceled and object removed from active routing. The server broadcasts `game:switched`, the new authoritative state and updated lobby/current-game metadata. Every new game has a new random UUID.
 
 Alag starts with all 29 groups, zero scores, no eliminated players, dice, return mode, pending selection or winners. Horse Racing starts at zero positions with no results, ranking, finished racers or winner, using the selected track. Previously eliminated/finished players join the fresh game normally.
 
@@ -30,10 +30,10 @@ Old-game rolls, selections, throws, restarts and switch requests are rejected. C
 1. In `Mongol togloom 2/Alag-Melhii`, run `npm start` (`npm.cmd start` if required in Windows PowerShell).
 2. Open `http://localhost:3000/lobby.html` in three separate browsers/profiles. Join Azaa first, Bat second, Dulguun third. Confirm seats 1/2/3 and Azaa as host.
 3. Start Alag Melkhii and play several actions. Only Azaa should see enabled Restart and Switch Game controls.
-4. Azaa opens **Тоглоом солих**, selects Horse Racing and length **12**. Cancel once: nothing changes. Reopen and confirm **Шинэ тоглоом эхлүүлэх** and the confirmation prompt.
-5. All three pages must automatically enter Horse Racing without names/Join prompts. Check identical seats/names/host, all positions zero, empty ranking/results and Seat 1's turn.
-6. Restart Horse Racing and verify track 12 is retained. Throw, then switch back to Alag while animation is active. All pages should show a fresh 108-bone board, zero scores, no pending dice/highlights and Seat 1's turn.
-7. Restart Alag, then switch again using length 18 or 24. Verify both controls retain their distinct behavior.
+4. Azaa opens **Тоглоом солих**, selects Horse Racing, chooses an age category and one exact distance such as **Даага · 10 км · 20 шагай**. Cancel once: nothing changes. Reopen and confirm **Шинэ тоглоом эхлүүлэх** and the confirmation prompt.
+5. All three pages must automatically enter Horse Racing without names/Join prompts. Check identical category/distance, seats/names/host, all positions zero, empty ranking/results and Seat 1's turn.
+6. Restart Horse Racing and verify the category/distance is retained. Throw, then switch back to Alag while animation is active. All pages should show a fresh 108-bone board, zero scores, no pending dice/highlights and Seat 1's turn.
+7. Restart Alag, then switch again using a different valid Horse Racing category/distance. Verify both controls retain their distinct behavior.
 8. Close Dulguun's page during Alag. Azaa switches to Horse. Dulguun reopens the same browser at the game menu/lobby and chooses **Тоглолтдоо буцаж орох**. Confirm the current Horse game, same Seat 3/token and no duplicate player. Directly reopening the obsolete turtle page must also lead to the current Horse game.
 9. Confirm guests cannot switch or restart, including manually emitting `game:switch`. Old game IDs must be rejected rather than modifying the new game.
 

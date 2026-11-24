@@ -84,6 +84,26 @@ test('Horse Racing refresh restores an old result without replaying its animatio
   client.ready(); await tick(); assert.equal(applied[0].animate, false);
 });
 
+test('a zero-step turning animation rotates in place without creating track movement', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../race.js'), 'utf8');
+  const start = source.indexOf('async function animateHorse(');
+  const end = source.indexOf('\nfunction cancelRaceAnimations', start);
+  assert.ok(start >= 0 && end > start);
+  const turns = [];
+  const context = {
+    moveMotion: null, reduced: false,
+    hasHorseMovement(from, to) { return from !== to; },
+    animateTurn: async (horse, position) => turns.push([horse, position]),
+    trackPoint() { throw Error('A zero-step throw must not calculate a movement path.'); }
+  };
+  vm.createContext(context);
+  vm.runInContext(source.slice(start, end), context);
+  const horse = { position: 0, lane: -0.6 };
+  await context.animateHorse(horse, { fromPosition: 0, position: 0, turnedForward: true }, { aborted: false });
+  assert.deepEqual(turns, [[horse, 0]]);
+  assert.equal(context.moveMotion, null);
+});
+
 test('Horse Racing multiplayer end requests are available only to the host and stop after ending', async () => {
   const { createHorseMultiplayer } = await import('../race-multiplayer.mjs');
   const socket = new Socket(), controls = [];
@@ -129,6 +149,7 @@ test('local Horse Racing confirmation cancel preserves the game and confirm ends
   const element = id => {
     if (!elements.has(id)) elements.set(id, {
       hidden: id === 'game-over', disabled: false, open: false,
+      addEventListener() {},
       showModal() { this.open = true; }, close() { this.open = false; }
     });
     return elements.get(id);

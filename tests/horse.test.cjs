@@ -63,6 +63,46 @@ test('four-berkh remains distinct from four horses and keeps its four-space bonu
   assert.equal(fourHorses.steps, 3);
 });
 
+test('horse age ranges convert to selectable distances, curved paths, titles and foal finish message', async () => {
+  const {
+    HORSE_AGE_CATEGORIES, horseTrackOptions, isValidHorseRaceSelection,
+    buildHorseTrackPath, finishTitle, foalLastPlaceAnnouncement
+  } = await import('../race-logic.mjs');
+  const ranges = {
+    azarga: [44, 46, 48], 'ikh-nas': [48, 50, 52], soyolon: [36, 38, 40],
+    hyzaalan: [30, 32, 34], shudlen: [24, 26, 28], daaga: [20, 22, 24]
+  };
+  assert.equal(HORSE_AGE_CATEGORIES.length, 6);
+  for (const [category, distances] of Object.entries(ranges)) {
+    const options = horseTrackOptions(category);
+    assert.deepEqual(options.map(option => option.trackLength), distances);
+    for (const option of options) {
+      assert.equal(option.trackLength, option.kilometers * 2);
+      assert.equal(isValidHorseRaceSelection(category, option.trackLength), true);
+      const path = buildHorseTrackPath(option.trackLength);
+      assert.equal(path.length, option.trackLength + 1);
+      assert.ok(path[0].x < path.at(-1).x);
+      assert.ok(Math.abs(path[0].z - path.at(-1).z) < 1e-10);
+      for (let i = 1; i < path.length; i++) {
+        assert.ok(Math.abs(Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z) - 1) < 1e-10);
+      }
+      if (option.trackLength > 24) assert.ok(Math.max(...path.map(point => point.z)) > Math.min(...path.map(point => point.z)));
+    }
+  }
+  assert.equal(isValidHorseRaceSelection('daaga', 18), false);
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(finishTitle), [
+    'Түрүү магнай', 'Аман хүзүү', 'Айргийн гурав', 'Айргийн дөрөв', 'Айргийн тав',
+    'Цулбуурын зургаа', 'Цулбуурын долоо', 'Цулбуурын найм', 'Цулбуурын ес',
+    'Цулбуурын арав', 'Цулбуурын арван нэг', 'Цулбуурын арван хоёр'
+  ]);
+  const message = 'Энэ тоглолтын баян ходоод, ирэх тоглолтын түрүү магнай!';
+  assert.equal(foalLastPlaceAnnouncement('daaga', ['a'], 2, true), null);
+  assert.equal(foalLastPlaceAnnouncement('daaga', ['a', 'a'], 2, true), null);
+  assert.equal(foalLastPlaceAnnouncement('daaga', ['a', 'b'], 2, false), null);
+  assert.equal(foalLastPlaceAnnouncement('soyolon', ['a', 'b'], 2, true), null);
+  assert.equal(foalLastPlaceAnnouncement('daaga', ['a', 'b'], 2, true), message);
+});
+
 test('multiplayer server turns backward horses in place and restores facing/position on reconnect', async t => {
   const faces = [1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1];
   let faceIndex = 0;
@@ -110,6 +150,8 @@ test('multiplayer server turns backward horses in place and restores facing/posi
   const restoredState = await horseState(restored, s => s?.players.some(p => p.id === guest.session.playerId && p.position === 1 && p.facingForward));
   assert.equal(restoredState.players.find(p => p.id === guest.session.playerId).position, 1);
   assert.equal(restoredState.players.find(p => p.id === guest.session.playerId).facingForward, true);
+  assert.equal(restoredState.horseCategory, 'daaga');
+  assert.equal(restoredState.distanceKm, 10);
 });
 
 test('only the host can end a race; ended state synchronizes, restores, and resets cleanly', async t => {
@@ -137,6 +179,8 @@ test('only the host can end a race; ended state synchronizes, restores, and rese
   const restored = await client(token);
   const restoredState = await horseState(restored, s => s?.id === ended.id && s.finished);
   assert.equal(restoredState.endReason, 'ended-early');
+  assert.equal(restoredState.horseCategory, ended.horseCategory);
+  assert.equal(restoredState.distanceKm, ended.distanceKm);
   assert.deepEqual(restoredState.players, ended.players);
 
   const restartedState = horseState(restored, s => s?.id !== ended.id);
@@ -144,6 +188,8 @@ test('only the host can end a race; ended state synchronizes, restores, and rese
   const restarted = await restartedState;
   assert.equal(restarted.finished, false);
   assert.equal(restarted.endReason, null);
+  assert.equal(restarted.horseCategory, ended.horseCategory);
+  assert.equal(restarted.distanceKm, ended.distanceKm);
   assert.deepEqual(restarted.ranking, []);
   assert.equal(restarted.winnerId, null);
   assert.ok(restarted.players.every(player =>
@@ -169,8 +215,8 @@ async function fixture(t, horseOptions) {
   await emit(guest, 'lobby:join', { name: 'Bat' });
   return { host, guest, spectator, client, base, clients };
 }
-async function startHorse(host, length = 12) {
-  assert.equal((await emit(host, 'lobby:select', { game: 'horse', trackLength: length })).ok, true);
+async function startHorse(host, length = 20, horseCategory = 'daaga') {
+  assert.equal((await emit(host, 'lobby:select', { game: 'horse', horseCategory, trackLength: length })).ok, true);
   assert.equal((await emit(host, 'lobby:start')).ok, true);
   return horseState(host, s => Boolean(s));
 }
@@ -178,21 +224,26 @@ async function startHorse(host, length = 12) {
 test('Horse Racing lobby, authoritative throws, movement, turns and full ranking', async t => {
   const throws = [
     [0, 0, 0, 0], [0, 1, 2, 3], [0, 0, 0, 1], [1, 1, 2, 3],
-    [0, 0, 0, 0], [1, 1, 2, 3], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]
+    [0, 0, 0, 0], [1, 1, 2, 3], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0],
+    [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]
   ];
   const randomFaces = throws.flat(); let randomCalls = 0;
   const { host, guest, spectator, client } = await fixture(t, {
     randomFace: () => randomFaces[randomCalls++], animationMs: 100, disconnectGraceMs: 100
   });
   await t.test('only host selects game/track; settings synchronize and reject invalid values', async () => {
-    assert.equal((await emit(guest, 'lobby:select', { game: 'horse', trackLength: 12 })).ok, false);
-    assert.equal((await emit(spectator, 'lobby:select', { game: 'horse', trackLength: 12 })).ok, false);
+    assert.equal((await emit(guest, 'lobby:select', { game: 'horse', horseCategory: 'daaga', trackLength: 20 })).ok, false);
+    assert.equal((await emit(spectator, 'lobby:select', { game: 'horse', horseCategory: 'daaga', trackLength: 20 })).ok, false);
     assert.equal((await emit(host, 'lobby:select', { game: 'https://evil.test', trackLength: 12 })).ok, false);
-    assert.equal((await emit(host, 'lobby:select', { game: 'horse', trackLength: 13 })).ok, false);
-    for (const length of [24, 18, 12]) {
-      const state = waitFor(guest, 'lobby:state', s => s.selectedGame === 'horse' && s.trackLength === length);
-      assert.equal((await emit(host, 'lobby:select', { game: 'horse', trackLength: length })).ok, true);
-      assert.equal((await state).trackLength, length);
+    assert.equal((await emit(host, 'lobby:select', { game: 'horse', trackLength: 20 })).ok, false);
+    assert.equal((await emit(host, 'lobby:select', { game: 'horse', horseCategory: 'daaga', trackLength: 18 })).ok, false);
+    assert.equal((await emit(host, 'lobby:select', { game: 'horse', horseCategory: 'daaga', trackLength: 13 })).ok, false);
+    for (const [horseCategory, trackLength] of [['azarga', 44], ['ikh-nas', 52], ['soyolon', 36], ['hyzaalan', 30], ['shudlen', 28], ['daaga', 20]]) {
+      const state = waitFor(guest, 'lobby:state', s => s.selectedGame === 'horse' && s.trackLength === trackLength);
+      assert.equal((await emit(host, 'lobby:select', { game: 'horse', horseCategory, trackLength })).ok, true);
+      const selected = await state;
+      assert.equal(selected.trackLength, trackLength);
+      assert.equal(selected.horseCategory, horseCategory);
     }
     assert.equal((await emit(host, 'horse:throw', {})).ok, false);
   });
@@ -203,7 +254,9 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
     const start = await started;
     const a = await horseState(host, s => Boolean(s)), b = await horseState(guest, s => Boolean(s));
     assert.deepEqual(a, b); assert.equal(start.selectedGame, 'horse'); assert.equal(start.gameId, a.id);
-    assert.equal(a.trackLength, 12); assert.equal(a.currentSeat, 0); assert.equal(a.currentPlayerId, host.session.playerId);
+    assert.equal(start.horseCategory, 'daaga'); assert.equal(start.trackLength, 20);
+    assert.equal(a.trackLength, 20); assert.equal(a.distanceKm, 10); assert.equal(a.horseCategory, 'daaga');
+    assert.equal(a.currentSeat, 0); assert.equal(a.currentPlayerId, host.session.playerId);
     assert.deepEqual(a.players.map(p => [p.name, p.seat, p.position, p.facingForward]), [['Azaa', 0, 0, false], ['Bat', 1, 0, false]]);
     assert.equal((await emit(host, 'lobby:select', { game: 'alag', trackLength: 24 })).ok, false);
     assert.equal((await emit(host, 'game:roll', {})).ok, false);
@@ -215,6 +268,7 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
     const state = await horseState(racer, s => Boolean(s));
     assert.equal(racer.session.playerId, id); assert.equal(state.id, gameId);
     assert.equal(state.currentPlayerId, id); assert.equal(state.players[0].name, 'Azaa'); assert.equal(state.players[0].seat, 0);
+    assert.equal(state.horseCategory, 'daaga'); assert.equal(state.distanceKm, 10);
   });
   await t.test('rejects non-current, spectator and forged-seat actions without consuming randomness', async () => {
     const payload = { ...request(racer.horse), seat: 0, playerId: racer.session.playerId, faces: [0, 0, 0, 0], steps: 100 };
@@ -223,7 +277,7 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
     assert.equal((await emit(racer, 'horse:throw', { gameId: 'forged', turnNumber: 1 })).ok, false);
     assert.equal(randomCalls, 0);
   });
-  const { advance } = await import('../race-logic.mjs');
+  const { advance, finishTitle, foalLastPlaceAnnouncement } = await import('../race-logic.mjs');
   let oldRequest;
   for (let i = 0; i < throws.length; i++) {
     await t.test('throw ' + (i + 1) + ': shared rules, synchronized position and turn', async () => {
@@ -243,22 +297,25 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
       assert.equal(randomCalls, (i + 1) * 4);
       assert.equal((await emit(actor, 'horse:throw', payload)).ok, false);
       assert.equal((await emit(actor, 'horse:throw', oldRequest)).ok, false);
-      if (i === 6) {
-        assert.equal(expected.position, 12); assert.equal(previous.position, 10);
+      if (i === 10) {
+        assert.equal(expected.position, 20); assert.equal(previous.position, 18);
         assert.deepEqual(state.ranking, [racer.session.playerId]); assert.equal(state.winnerId, racer.session.playerId);
       }
       const after = await horseState(racer, s => s?.lastThrow?.sequence === i + 1 && s.phase !== 'animating');
       const peer = await horseState(guest, s => s?.lastThrow?.sequence === i + 1 && s.phase !== 'animating');
       assert.deepEqual(after, peer);
       if (i < throws.length - 1) {
-        const expectedId = i < 6 ? (actor === racer ? guest.session.playerId : racer.session.playerId) : guest.session.playerId;
+        const expectedId = i < 10 ? (actor === racer ? guest.session.playerId : racer.session.playerId) : guest.session.playerId;
         assert.equal(after.currentPlayerId, expectedId); assert.equal(after.turnNumber, before.turnNumber + 1);
         assert.equal(after.phase, 'ready');
       } else {
         assert.equal(after.finished, true); assert.equal(after.currentPlayerId, null);
         assert.equal(after.endReason, 'finish');
         assert.deepEqual(after.ranking, [racer.session.playerId, guest.session.playerId]);
-        assert.ok(after.players.every(p => p.finished && p.position === 12));
+        assert.ok(after.players.every(p => p.finished && p.position === 20));
+        assert.deepEqual(after.ranking.map((_id, index) => finishTitle(index + 1)), ['Түрүү магнай', 'Аман хүзүү']);
+        assert.equal(foalLastPlaceAnnouncement('daaga', after.ranking, after.players.length, after.endReason === 'finish'),
+          'Энэ тоглолтын баян ходоод, ирэх тоглолтын түрүү магнай!');
         assert.equal((await emit(guest, 'horse:throw', request(after))).ok, false);
       }
     });
@@ -311,7 +368,7 @@ test('all offline waits safely and a reconnect resumes an unfinished race', asyn
 
 test('disconnect during animation keeps the accepted move and advances without waiting for acknowledgements', async t => {
   const { host, guest, client } = await fixture(t, { randomFace: () => 0, animationMs: 80, disconnectGraceMs: 1000 });
-  const state = await startHorse(host, 18), token = host.session.token, id = host.session.playerId;
+  const state = await startHorse(host, 20), token = host.session.token, id = host.session.playerId;
   assert.equal((await emit(host, 'horse:throw', request(state))).ok, true);
   host.disconnect();
   const next = await horseState(guest, s => s?.phase === 'ready' && s.currentPlayerId === guest.session.playerId);
