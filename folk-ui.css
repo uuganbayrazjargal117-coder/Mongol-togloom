@@ -1,0 +1,224 @@
+
+/* === Folk illustration UI skin: non-gameplay interface only === */
+:root{--folk-ink:#593720;--folk-border:#8b4a2c;--folk-paper:#ffdfaa;--folk-red:#a44e30;--folk-shadow:#60341d55}
+body:not(.race-page),body.race-page{color:var(--folk-ink)}
+header{background:#f7d39df2!important;border:3px solid #8b4a2c!important;border-radius:17px 22px 15px 20px!important;box-shadow:3px 5px 0 #8d4b2d77!important;color:var(--folk-ink)!important;padding:8px 17px!important}
+header h1{font-family:Georgia,serif!important;color:#60351f!important;text-shadow:1px 1px #fff1ce!important}
+header .eyebrow,.eyebrow{color:#8b5434!important;letter-spacing:.16em}
+header a,header button,nav a{color:#683b23!important;background:#ffe7b9!important;border:2px solid #a66c47!important;border-radius:13px 11px 14px 12px!important;text-decoration:none!important}
+button,.primary,select,input{font-family:inherit!important}
+button:not(.pip),.primary{border:2px solid #965a3c!important;border-radius:13px 16px 12px 15px!important;background:#ffdfab!important;color:#653a22!important;box-shadow:2px 3px 0 #8150374d!important;transition:filter .15s,transform .15s}
+button:not(:disabled):hover{filter:brightness(1.05);transform:translateY(-2px)}
+button.primary,#begin,#start,#throw,#roll{background:#ae5738!important;color:#fff3d5!important;border-color:#78391f!important;font-weight:700!important}
+.start-screen{background:#3e27188c!important;backdrop-filter:blur(3px)!important;padding:14px!important;overflow-y:auto!important}
+.start-card{width:min(390px,92vw)!important;max-width:390px!important;max-height:calc(100dvh - 28px)!important;overflow-y:auto!important;padding:22px 26px 20px!important;text-align:center!important;background:linear-gradient(165deg,#ffe5b9,#f3c98e)!important;border:3px solid #824225!important;border-radius:23px 19px 25px 20px!important;box-shadow:5px 7px 0 #6e3d2988,inset 0 0 0 4px #f9d6a0!important;color:#5e3822!important}
+.start-card::before{content:'❧  ◇  ❧';display:block;color:#a75a36;letter-spacing:8px;font-size:16px;margin-bottom:2px}
+.start-card h2{font-family:Georgia,serif!important;color:#65371f!important;font-size:clamp(25px,3.3vw,34px)!important;line-height:1.12!important;margin:7px 0 14px!important;text-shadow:1px 1px #fff5d8}
+.start-card p{color:#76513b!important;font-size:13px!important;margin:9px 0 13px!important}
+.start-card>label,.custom-count label{color:#65412c!important;font-size:15px!important;display:block;margin:10px 0 6px!important;text-align:left}
+.start-card input,.start-card select{background:#fff4db!important;color:#51331f!important;border:2px solid #b67b51!important;border-radius:11px!important;padding:10px 12px!important;width:100%;font-size:15px!important}
+.start-card .player-picks{margin:10px 0!important;gap:7px!important}.player-picks button{width:40px!important;height:40px!important;font-size:16px!important;padding:0!important}.player-picks .selected{background:#ae5738!important;color:#fff3d5!important}
+.start-card .custom-count{margin:9px 0 14px!important;display:flex;align-items:center;gap:10px!important}.custom-count label{margin:0!important;flex:1}.custom-count input{width:80px!important;flex:none}
+.start-card #begin,.start-card #start{width:100%!important;padding:11px!important;margin-top:14px!important;font-size:16px!important}
+.start-card .other-game,.start-card a[href="index.html"]{color:#7a4128!important;text-decoration:underline!important;display:block;margin-top:12px!important;font-size:14px!important}
+.start-card .eyebrow{font-size:11px!important}
+/* Sidebar and controls: leave actual board canvas untouched */
+aside,.race-panel{background:#ffedcce8!important;border:2px solid #9c6745!important;border-radius:18px 15px 19px 16px!important;color:#5e3b26!important;box-shadow:3px 4px 0 #8c593c55!important;backdrop-filter:none!important}
+.turn,.action,.race-panel>section{color:#5e3b26!important}
+#scores .score,#race-scores .race-score{border-color:#b58c62!important;background:#f7dfb4!important;color:#583922!important}
+#scores .score.active,#race-scores .race-score.active{background:#eab970!important}
+#choices button,.proverb-choices button{background:#ffedcd!important;color:#593923!important}
+#result,#message,#race-caption,.race-caption{color:#674630!important}
+.race-top,.boardtop,.boardbottom{color:#67432b!important}
+.race-panel #throw-scene,.dice-tray{border-radius:14px!important;border:2px solid #b88b5f!important}
+dialog{background:#ffe3b2!important;color:#603a25!important;border:3px solid #89482b!important;border-radius:21px 17px 23px 19px!important;box-shadow:6px 8px 0 #603c2970!important;max-height:85dvh;overflow:auto}
+dialog::backdrop{background:#372014a8!important;backdrop-filter:blur(2px)}
+dialog h2{color:#703c23!important;font-family:Georgia,serif}
+@media(max-width:600px){.start-card{padding:17px 19px!important}.start-card h2{font-size:26px!important}.start-card .player-picks button{width:35px!important;height:35px!important}}
+@media(max-height:680px){.start-card{padding:12px 22px!important}.start-card h2{font-size:26px!important;margin:4px 0 8px!important}.start-card>label{margin:6px 0 4px!important}.start-card #begin,.start-card #start{margin-top:8px!important}}
+
+/* v3: legible board captions and properly sized header navigation. */
+body:not(.race-page) .boardtop,
+body:not(.race-page) .boardbottom {
+  position:relative; z-index:2;
+  background:rgba(255,239,207,.97)!important;
+  color:#56301e!important;
+  text-shadow:none!important;
+  border:2px solid #a36b43!important;
+  border-radius:10px 13px 9px 12px!important;
+  padding:8px 14px!important;
+  min-height:36px;
+  font-size:clamp(12px,1.15vw,15px)!important;
+  line-height:1.4!important;
+  font-weight:650!important;
+  gap:12px;
+}
+body:not(.race-page) .boardtop span,
+body:not(.race-page) .boardbottom span {color:#56301e!important;opacity:1!important;}
+body:not(.race-page) .boardbottom {margin-top:2px;}
+body:not(.race-page) .boardbottom button {background:#ffe5b5!important;color:#59321f!important;}
+body:not(.race-page) header,
+body.race-page header {display:flex!important;align-items:center!important;justify-content:space-between!important;gap:14px!important;flex-wrap:wrap!important;}
+body:not(.race-page) header>div,
+body.race-page header>div {min-width:0;flex:1 1 210px;}
+body:not(.race-page) header h1,
+body.race-page header h1 {font-size:clamp(22px,2.6vw,33px)!important;line-height:1.2!important;}
+body:not(.race-page) header>a,
+body:not(.race-page) header>button,
+body.race-page header nav a,
+body.race-page header nav button {
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  flex:0 0 auto!important;
+  min-height:43px!important;
+  padding:9px 16px!important;
+  margin:0!important;
+  white-space:nowrap!important;
+  line-height:1.25!important;
+  font-size:clamp(13px,1.2vw,16px)!important;
+  font-weight:650!important;
+  letter-spacing:0!important;
+  color:#60361f!important;
+  background:#ffe6b9!important;
+  border:2px solid #9e5d3c!important;
+  border-radius:13px 11px 15px 12px!important;
+  box-shadow:2px 3px 0 #76402a44!important;
+  text-decoration:none!important;
+  text-align:center!important;
+}
+body.race-page header nav {display:flex!important;align-items:center!important;gap:10px!important;flex-wrap:wrap!important;}
+body:not(.race-page) header>button:hover,
+body:not(.race-page) header>a:hover,
+body.race-page header nav a:hover,
+body.race-page header nav button:hover {background:#f4cd91!important;}
+@media(max-width:600px){
+  body:not(.race-page) header,body.race-page header {gap:9px!important;}
+  body:not(.race-page) header>a,body:not(.race-page) header>button,
+  body.race-page header nav a,body.race-page header nav button {min-height:38px!important;padding:8px 10px!important;font-size:13px!important;}
+  body:not(.race-page) .boardtop,body:not(.race-page) .boardbottom {padding:6px 9px!important;min-height:30px;font-size:12px!important;}
+}
+
+/* Text visibility only: no new panels, backgrounds or layout changes. */
+body.race-page .race-top,
+body.race-page .race-top span,
+body.race-page #track-label,
+body.race-page .race-caption,
+body.race-page .race-board .race-caption {
+  color: #30180f !important;
+  opacity: 1 !important;
+  text-shadow: 0 1px 0 rgba(255,246,224,.8) !important;
+}
+
+/* Race text matches the dark readable text used in Alag Melkhii. */
+body.race-page .race-top,
+body.race-page .race-top *,
+body.race-page .race-caption,
+body.race-page .race-caption *,
+body.race-page #track-label,
+body.race-page #loading {
+  color: #30180f !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+/* Морь уралдуулах: Алаг мэлхийтэй ижил текстийн өнгө.
+   Зөвхөн бичвэрт нөлөөлнө; байрлал, хүрээ, дэвсгэр өөрчлөхгүй. */
+body.race-page .race-board .race-top,
+body.race-page .race-board .race-top span,
+body.race-page .race-board #track-label,
+body.race-page .race-board .race-caption,
+body.race-page .race-board #loading {
+  color: #56301e !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+
+/* MORI URALDUULAH — match Alag Melkhii board and side UI.
+   Presentation only: game scene, model, controls and logic unchanged. */
+body.race-page .race-layout {
+  gap: 10px !important;
+}
+body.race-page .race-board {
+  position: relative;
+  min-width: 0;
+}
+body.race-page .race-top,
+body.race-page .race-caption {
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  background: rgba(255,239,207,.97) !important;
+  color: #56301e !important;
+  border: 2px solid #a36b43 !important;
+  border-radius: 13px 12px 12px 13px !important;
+  box-shadow: 0 2px 3px #5e321a30 !important;
+  text-shadow: none !important;
+  font-size: clamp(12px,1.15vw,15px) !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+  padding: 8px 14px !important;
+  min-height: 38px;
+  flex-shrink: 0;
+}
+body.race-page .race-top {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+body.race-page .race-top span,
+body.race-page .race-caption,
+body.race-page #track-label {
+  color: #56301e !important;
+  opacity: 1 !important;
+}
+body.race-page .race-caption {
+  margin-top: 2px;
+  white-space: normal;
+}
+body.race-page .race-panel {
+  background: #ffedcce8 !important;
+  border: 2px solid #9c6745 !important;
+  border-radius: 18px 15px 19px 16px !important;
+  box-shadow: 3px 4px 0 #8c593c55 !important;
+  color: #5e3b26 !important;
+}
+body.race-page .race-panel #turn {
+  color: #593720 !important;
+  font-weight: 750 !important;
+}
+body.race-page .race-panel .race-score {
+  border: 1px solid #b58c62 !important;
+  border-radius: 11px !important;
+  background: #f7dfb4 !important;
+  color: #583922 !important;
+}
+body.race-page .race-panel .race-score.active {
+  background: #eab970 !important;
+}
+body.race-page .race-panel #throw-scene {
+  border: 2px solid #b88b5f !important;
+  border-radius: 14px 14px 0 0 !important;
+}
+body.race-page .race-panel #face-labels {
+  color: #593720 !important;
+  background: #f1d7ab !important;
+  border-color: #b88b5f !important;
+}
+body.race-page .race-panel #result {
+  color: #56301e !important;
+}
+@media (max-width: 1000px) {
+  body.race-page .race-top,
+  body.race-page .race-caption {padding: 8px 10px !important;}
+}
+@media (max-width: 550px) {
+  body.race-page .race-top {gap: 5px; font-size: 12px !important;}
+  body.race-page .race-caption {font-size: 12px !important;}
+}
+body.race-page .race-caption {
+    display: none !important;
+}
