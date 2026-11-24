@@ -71,6 +71,7 @@ for (const [horseCategory, length] of [['daaga', 20], ['soyolon', 36], ['ikh-nas
   assert.equal((await emit(host, 'game:restart', { gameId: old.id })).ok, true);
   const reset = await received; assert.deepEqual(identities(reset), roster); assert.equal(reset.trackLength, length);
   assert.equal(reset.horseCategory, horseCategory); assert.equal(reset.distanceKm, length / 2);
+  assert.equal(reset.finishPosition, length + 1);
   assert.ok(reset.players.every(p => p.position === 0 && !p.finished));
   assert.deepEqual(reset.ranking, []); assert.deepEqual(reset.faces, []); assert.equal(reset.lastThrow, null);
   assert.equal(reset.winnerId, null); assert.equal(reset.finished, false); assert.equal(reset.currentSeat, 0);
@@ -98,6 +99,7 @@ test('Alag close/rejoin preserves seat and pending state; an offline current tur
 
 test('Horse restart clears a nonempty final ranking and winner', async t => {
   const { host, guest, event } = await fixture(t, 'horse', 20);
+  assert.equal(host.state.finishPosition, 21);
   for (let i = 0; i < 12; i++) {
     const actor = i % 2 ? guest : host;
     if (actor.state.phase !== 'ready') await next(actor, event, s => s.phase === 'ready');

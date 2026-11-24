@@ -15,7 +15,7 @@ function createHorseGame(roster, trackLength, publish, {
     id: randomUUID(), hostId, gameType: 'horse', started: true, finished: false,
     endReason: null,
     players: roster.map(p => ({ ...p, connected: true, position: 0, finished: false, hasThrown: false, facingForward: false })),
-    horseCategory, distanceKm: trackLength / 2, trackLength,
+    horseCategory, distanceKm: trackLength / 2, trackLength, finishPosition: trackLength + 1,
     currentPlayerId: roster[0].id, currentSeat: roster[0].seat,
     turnNumber: 1, phase: 'ready', faces: [], lastThrow: null,
     ranking: [], winnerId: null
@@ -79,7 +79,7 @@ function createHorseGame(roster, trackLength, publish, {
     player.position = result.position;
     player.hasThrown = true;
     player.facingForward = result.facingForward;
-    if (player.position === state.trackLength) {
+    if (player.position >= state.finishPosition) {
       player.finished = true;
       state.ranking.push(id);
       state.winnerId ??= id;

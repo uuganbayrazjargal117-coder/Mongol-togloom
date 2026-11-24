@@ -104,6 +104,25 @@ test('a zero-step turning animation rotates in place without creating track move
   assert.equal(context.moveMotion, null);
 });
 
+test('3D layout has N shagai markers and places the finish one spaced step after marker N', async () => {
+  const { buildHorseTrackLayout, HORSE_TRACK_SPACING } = await import('../race-logic.mjs');
+  const source = fs.readFileSync(path.join(__dirname, '../race.js'), 'utf8');
+  assert.match(source, /for\(const j of layout\.markerPositions\)/);
+  assert.match(source, /trackPoint\(finishPosition\)/);
+  const layout = buildHorseTrackLayout(20), start = source.indexOf('function trackPoint(');
+  const end = source.indexOf('\nfunction trackHeading', start);
+  class Vector3 { constructor(x, y, z) { this.x = x; this.y = y; this.z = z; } }
+  const context = { length: 20, trackPath: layout.path, horseFinishPosition: value => value + 1, THREE: { Vector3 } };
+  vm.createContext(context);
+  vm.runInContext(source.slice(start, end), context);
+  assert.equal(layout.markerPositions.length, 20);
+  assert.equal(layout.markerPositions.at(-1), 20);
+  const finalMarker = context.trackPoint(20), finish = context.trackPoint(21);
+  assert.deepEqual([finalMarker.x, finalMarker.z], [layout.path[20].x, layout.path[20].z]);
+  assert.deepEqual([finish.x, finish.z], [layout.path[21].x, layout.path[21].z]);
+  assert.ok(Math.abs(Math.hypot(finish.x - finalMarker.x, finish.z - finalMarker.z) - HORSE_TRACK_SPACING) < 1e-10);
+});
+
 test('Horse Racing multiplayer end requests are available only to the host and stop after ending', async () => {
   const { createHorseMultiplayer } = await import('../race-multiplayer.mjs');
   const socket = new Socket(), controls = [];

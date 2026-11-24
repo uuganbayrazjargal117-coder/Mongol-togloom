@@ -68,7 +68,7 @@ test('horse age ranges convert to selectable distances, curved paths, titles and
     HORSE_AGE_CATEGORIES, horseTrackOptions, isValidHorseRaceSelection,
     buildHorseTrackPath, finishTitle, foalLastPlaceAnnouncement,
     HORSE_TRACK_SPACING, HORSE_TRACK_MARKER_SCALE, HORSE_TRACK_CAMERA_HEIGHT,
-    horseTrackCameraFrame
+    horseTrackCameraFrame, horseFinishPosition, horseProgressLabel, buildHorseTrackLayout, advance
   } = await import('../race-logic.mjs');
   const ranges = {
     azarga: [44, 46, 48], 'ikh-nas': [48, 50, 52], soyolon: [36, 38, 40],
@@ -83,6 +83,21 @@ test('horse age ranges convert to selectable distances, curved paths, titles and
   assert.throws(() => horseTrackCameraFrame(0), RangeError);
   const shortTrack = buildHorseTrackPath(20), longTrack = buildHorseTrackPath(52);
   assert.ok(longTrack.at(-1).x - longTrack[0].x > shortTrack.at(-1).x - shortTrack[0].x);
+  for (const trackLength of [20, 24, 28, 34, 40, 48, 52]) {
+    const layout = buildHorseTrackLayout(trackLength);
+    const finishPosition = horseFinishPosition(trackLength), path = layout.path;
+    assert.equal(layout.markerPositions.length, trackLength);
+    assert.equal(layout.markerPositions.at(-1), trackLength);
+    assert.equal(path.length, trackLength + 2);
+    assert.equal(finishPosition, trackLength + 1);
+    assert.ok(Math.abs(Math.hypot(path[finishPosition].x - path[trackLength].x, path[finishPosition].z - path[trackLength].z) - HORSE_TRACK_SPACING) < 1e-10);
+    assert.equal(horseProgressLabel(trackLength, trackLength), `Сүүлийн шагай · ${trackLength} / ${trackLength}`);
+    assert.equal(horseProgressLabel(finishPosition, trackLength), 'Барианд');
+  }
+  const finishLength = 20;
+  assert.equal(advance({ position: finishLength - 1, hasThrown: true, facingForward: true }, [0, 1, 1, 1], finishLength).position, finishLength);
+  assert.equal(advance({ position: finishLength, hasThrown: true, facingForward: true }, [0, 1, 1, 1], finishLength).position, finishLength + 1);
+  assert.equal(advance({ position: finishLength - 1, hasThrown: true, facingForward: true }, [0, 0, 0, 0], finishLength).position, finishLength + 1);
   for (const [category, distances] of Object.entries(ranges)) {
     const options = horseTrackOptions(category);
     assert.deepEqual(options.map(option => option.trackLength), distances);
@@ -124,6 +139,7 @@ test('multiplayer server turns backward horses in place and restores facing/posi
     animationMs: 15
   });
   let state = await startHorse(host);
+  assert.equal(state.finishPosition, state.trackLength + 1);
   assert.ok(state.players.every(player => !player.facingForward && !player.hasThrown));
 
   assert.equal((await emit(host, 'horse:throw', request(state))).ok, true);
@@ -165,6 +181,7 @@ test('multiplayer server turns backward horses in place and restores facing/posi
   assert.equal(restoredState.players.find(p => p.id === guest.session.playerId).facingForward, true);
   assert.equal(restoredState.horseCategory, 'daaga');
   assert.equal(restoredState.distanceKm, 10);
+  assert.equal(restoredState.finishPosition, restoredState.trackLength + 1);
 });
 
 test('only the host can end a race; ended state synchronizes, restores, and resets cleanly', async t => {
@@ -203,11 +220,44 @@ test('only the host can end a race; ended state synchronizes, restores, and rese
   assert.equal(restarted.endReason, null);
   assert.equal(restarted.horseCategory, ended.horseCategory);
   assert.equal(restarted.distanceKm, ended.distanceKm);
+  assert.equal(restarted.finishPosition, ended.trackLength + 1);
   assert.deepEqual(restarted.ranking, []);
   assert.equal(restarted.winnerId, null);
   assert.ok(restarted.players.every(player =>
     player.position === 0 && !player.finished && !player.hasThrown && !player.facingForward
   ));
+});
+
+test('the final shagai is not a finish and manually ending there declares no winner', async t => {
+  const throws = [
+    [0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [1, 1, 1, 1],
+    [0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [1, 1, 1, 1],
+    [0, 0, 0, 0], [1, 1, 1, 1], [0, 1, 1, 1]
+  ];
+  const faces = throws.flat();
+  let faceIndex = 0;
+  const { host, guest } = await fixture(t, { randomFace: () => faces[faceIndex++], animationMs: 10 });
+  let state = await startHorse(host);
+  for (let i = 0; i < throws.length; i++) {
+    const before = await horseState(host, snapshot => snapshot?.phase === 'ready' && snapshot.turnNumber === i + 1);
+    const actor = before.currentPlayerId === host.session.playerId ? host : guest;
+    const animating = horseState(guest, snapshot => snapshot?.lastThrow?.sequence === i + 1 && snapshot.phase === 'animating');
+    assert.equal((await emit(actor, 'horse:throw', request(before))).ok, true);
+    await animating;
+    state = await horseState(host, snapshot => snapshot?.lastThrow?.sequence === i + 1 && snapshot.phase === 'ready');
+  }
+  const horse = state.players.find(player => player.id === host.session.playerId);
+  assert.equal(horse.position, state.trackLength);
+  assert.equal(horse.finished, false);
+  assert.deepEqual(state.ranking, []);
+  assert.equal(state.winnerId, null);
+
+  const endedOnGuest = horseState(guest, snapshot => snapshot?.phase === 'ended');
+  assert.equal((await emit(host, 'horse:end', request(state))).ok, true);
+  const ended = await endedOnGuest;
+  assert.equal(ended.endReason, 'ended-early');
+  assert.deepEqual(ended.ranking, []);
+  assert.equal(ended.winnerId, null);
 });
 
 async function fixture(t, horseOptions) {
@@ -238,6 +288,7 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
   const throws = [
     [0, 0, 0, 0], [0, 1, 2, 3], [0, 0, 0, 1], [1, 1, 2, 3],
     [0, 0, 0, 0], [1, 1, 2, 3], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0],
+    [0, 0, 0, 0],
     [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]
   ];
   const randomFaces = throws.flat(); let randomCalls = 0;
@@ -268,7 +319,7 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
     const a = await horseState(host, s => Boolean(s)), b = await horseState(guest, s => Boolean(s));
     assert.deepEqual(a, b); assert.equal(start.selectedGame, 'horse'); assert.equal(start.gameId, a.id);
     assert.equal(start.horseCategory, 'daaga'); assert.equal(start.trackLength, 20);
-    assert.equal(a.trackLength, 20); assert.equal(a.distanceKm, 10); assert.equal(a.horseCategory, 'daaga');
+    assert.equal(a.trackLength, 20); assert.equal(a.finishPosition, 21); assert.equal(a.distanceKm, 10); assert.equal(a.horseCategory, 'daaga');
     assert.equal(a.currentSeat, 0); assert.equal(a.currentPlayerId, host.session.playerId);
     assert.deepEqual(a.players.map(p => [p.name, p.seat, p.position, p.facingForward]), [['Azaa', 0, 0, false], ['Bat', 1, 0, false]]);
     assert.equal((await emit(host, 'lobby:select', { game: 'alag', trackLength: 24 })).ok, false);
@@ -311,7 +362,7 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
       assert.equal((await emit(actor, 'horse:throw', payload)).ok, false);
       assert.equal((await emit(actor, 'horse:throw', oldRequest)).ok, false);
       if (i === 10) {
-        assert.equal(expected.position, 20); assert.equal(previous.position, 18);
+        assert.equal(expected.position, 21); assert.equal(previous.position, 18);
         assert.deepEqual(state.ranking, [racer.session.playerId]); assert.equal(state.winnerId, racer.session.playerId);
       }
       const after = await horseState(racer, s => s?.lastThrow?.sequence === i + 1 && s.phase !== 'animating');
@@ -325,7 +376,7 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
         assert.equal(after.finished, true); assert.equal(after.currentPlayerId, null);
         assert.equal(after.endReason, 'finish');
         assert.deepEqual(after.ranking, [racer.session.playerId, guest.session.playerId]);
-        assert.ok(after.players.every(p => p.finished && p.position === 20));
+        assert.ok(after.players.every(p => p.finished && p.position === 21));
         assert.deepEqual(after.ranking.map((_id, index) => finishTitle(index + 1)), ['Түрүү магнай', 'Аман хүзүү']);
         assert.equal(foalLastPlaceAnnouncement('daaga', after.ranking, after.players.length, after.endReason === 'finish'),
           'Энэ тоглолтын баян ходоод, ирэх тоглолтын түрүү магнай!');

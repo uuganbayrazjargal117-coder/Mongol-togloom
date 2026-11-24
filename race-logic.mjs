@@ -18,6 +18,19 @@ export function horseTrackCameraFrame(aspectRatio) {
   return { width: HORSE_TRACK_CAMERA_HEIGHT * aspectRatio, height: HORSE_TRACK_CAMERA_HEIGHT };
 }
 
+export function horseFinishPosition(trackLength) {
+  if (!Number.isInteger(trackLength) || trackLength < 1) {
+    throw new RangeError('Track length must be a positive integer.');
+  }
+  return trackLength + 1;
+}
+
+export function horseProgressLabel(position, trackLength, finished = false) {
+  if (finished || position >= horseFinishPosition(trackLength)) return 'Барианд';
+  if (position === trackLength) return `Сүүлийн шагай · ${trackLength} / ${trackLength}`;
+  return `${position} / ${trackLength} шагай`;
+}
+
 const placeNumbers = Object.freeze([
   '', '', '', 'гурав', 'дөрөв', 'тав', 'зургаа', 'долоо',
   'найм', 'ес', 'арав', 'арван нэг', 'арван хоёр'
@@ -72,6 +85,15 @@ export function buildHorseTrackPath(length, spacing = HORSE_TRACK_SPACING) {
   return points.map(point => ({ x: point.x - centerX, z: point.z - centerZ }));
 }
 
+export function buildHorseTrackLayout(trackLength) {
+  const finishPosition = horseFinishPosition(trackLength);
+  return {
+    markerPositions: Array.from({ length: trackLength }, (_, index) => index + 1),
+    finishPosition,
+    path: buildHorseTrackPath(finishPosition)
+  };
+}
+
 export function advance(horse,faces,length){
  const horses=faces.filter(x=>x===0).length;
  const different=new Set(faces).size===4;
@@ -79,7 +101,8 @@ export function advance(horse,faces,length){
  const turnedForward=!horse.facingForward&&horses>0;
  const facingForward=horse.facingForward||turnedForward;
  const steps=different?4:turnedForward?Math.max(0,horses-1):horses;
- return {horses,different,firstThrow,turnedForward,facingForward,steps,position:Math.min(length,horse.position+steps)};
+ const finishPosition=horseFinishPosition(length);
+ return {horses,different,firstThrow,turnedForward,facingForward,steps,finishPosition,position:Math.min(finishPosition,horse.position+steps)};
 }
 
 export function hasHorseMovement(fromPosition,toPosition){
