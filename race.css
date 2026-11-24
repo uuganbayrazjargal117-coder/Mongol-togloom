@@ -6,3 +6,9 @@
 @media(max-width:550px){.race-board{padding:12px}#race-scene{height:300px;min-height:300px}}
 
 .proverb-dialog{width:min(520px,calc(100% - 32px));border:2px solid #8a1726;border-radius:16px;padding:24px;background:#fff9e9;color:#503528;box-shadow:0 18px 50px #120b0880}.proverb-dialog::backdrop{background:#140a04b8}.proverb-dialog h2{margin-top:0}.proverb-choices{display:grid;gap:10px}.proverb-choices button{padding:12px;text-align:left;border:1px solid #b89972;border-radius:9px;background:#fff;color:#503528;font:inherit}.proverb-choices button:hover:not(:disabled){background:#ead9b9}.proverb-choices button:disabled{opacity:.7}#proverb-feedback{min-height:24px;font-weight:700}
+.end-game-actions{display:flex;justify-content:center;gap:12px;margin-top:20px}.end-game-actions button{min-width:110px;padding:10px 14px}
+.game-over-card{max-height:calc(100dvh - 40px);overflow:auto}.game-over-card h2{font-size:clamp(28px,5vw,42px);margin:12px 0 16px}
+#game-over-standings{display:grid;gap:6px;max-height:40dvh;overflow:auto;text-align:left;margin:16px 0}
+.game-over-standing{display:flex;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid #b89972;border-radius:8px;background:#fff9e9;font-size:14px}
+#play-again{width:100%;margin-top:8px}
+.race-panel #end-game{background:#fff8e9}

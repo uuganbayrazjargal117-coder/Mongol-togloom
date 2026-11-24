@@ -1,4 +1,65 @@
-<!doctype html><html lang="mn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Морь уралдуулах — Шагайн наадам</title><link rel="stylesheet" href="style.css?v=24"><link rel="stylesheet" href="race.css"><script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script><link rel="stylesheet" href="folk-ui.css?v=3"></head><body class="race-page"><header><div><span class="eyebrow">ШАГАЙН НААДАМ</span><h1>Морь уралдуулах</h1></div><nav><a href="index.html">Тоглоом сонгох</a><button id="rules">Тоглох дүрэм</button></nav></header><main class="race-layout"><section class="race-board"><div class="race-top"><span>ГАРАА</span><span id="track-label">18 шагайн зам</span><span>БАРИА</span></div><div id="race-scene"><p id="loading">Шагайг бэлдэж байна…</p></div><div class="race-caption">Эхний хаялтаар морь урагш эргэнэ · Дөрвөн бэрх 4 алхам</div></section><aside class="race-panel"><section><span class="eyebrow">ОДООГИЙН ЭЭЛЖ</span><h2 id="turn">Тоглогч 1</h2><div id="race-scores"></div></section><section class="throw-section"><div id="throw-scene"></div><div id="face-labels"><span>Морь</span><span>Тэмээ</span><span>Хонь</span><span>Ямаа</span></div><button id="throw" class="primary" disabled>4 шагай хаях</button><button id="camera-toggle" type="button" aria-pressed="false">Камераар шагай хаях</button><div id="camera-panel" hidden><video id="hand-video" autoplay muted playsinline aria-label="Гар таних камер"></video><p id="camera-status" role="status">Гараа атгаад, шидэх мэт савж хуруугаа суллаарай.</p></div><p id="result" role="status" aria-live="polite">Шагайг бэлдэж байна…</p></section><button id="new-game">Шинээр эхлэх</button><button id="switch-game" type="button" hidden>Тоглоом солих</button></aside></main><div class="start-screen" id="race-setup"><section class="start-card"><span class="eyebrow">ШАГАЙН НААДАМ</span><h2>Морь уралдуулах</h2><p>Өөрийн зүсний морийг барианд хүргээрэй.</p><label for="race-players">Тоглогчдын тоо</label><input id="race-players" type="number" min="1" max="12" value="2"><label for="track-length">Замын урт</label><select id="track-length"><option value="12">12 шагай · Богино</option><option value="18" selected>18 шагай · Дунд</option><option value="24">24 шагай · Урт</option></select><button id="begin" class="primary" disabled>Шагайг ачаалж байна…</button><a class="other-game" href="index.html">Тоглоом сонгох</a></section></div><dialog id="proverb-question" class="proverb-dialog">
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Морь уралдуулах — Шагайн наадам</title>
+  <link rel="stylesheet" href="style.css?v=24">
+  <link rel="stylesheet" href="race.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+  <link rel="stylesheet" href="folk-ui.css?v=3">
+</head>
+<body class="race-page">
+  <header>
+    <div><span class="eyebrow">ШАГАЙН НААДАМ</span><h1>Морь уралдуулах</h1></div>
+    <nav><a href="index.html">Тоглоом сонгох</a><button id="rules">Тоглох дүрэм</button></nav>
+  </header>
+  <main class="race-layout">
+    <section class="race-board">
+      <div class="race-top"><span>ГАРАА</span><span id="track-label">18 шагайн зам</span><span>БАРИА</span></div>
+      <div id="race-scene"><p id="loading">Шагайг бэлдэж байна…</p></div>
+      <div class="race-caption">Эхний хаялтаар морь урагш эргэнэ · Дөрвөн бэрх 4 алхам</div>
+    </section>
+    <aside class="race-panel">
+      <section><span class="eyebrow">ОДООГИЙН ЭЭЛЖ</span><h2 id="turn">Тоглогч 1</h2><div id="race-scores"></div></section>
+      <section class="throw-section">
+        <div id="throw-scene"></div>
+        <div id="face-labels"><span>Морь</span><span>Тэмээ</span><span>Хонь</span><span>Ямаа</span></div>
+        <button id="throw" class="primary" disabled>4 шагай хаях</button>
+        <button id="camera-toggle" type="button" aria-pressed="false">Камераар шагай хаях</button>
+        <div id="camera-panel" hidden><video id="hand-video" autoplay muted playsinline aria-label="Гар таних камер"></video><p id="camera-status" role="status">Гараа атгаад, шидэх мэт савж хуруугаа суллаарай.</p></div>
+        <p id="result" role="status" aria-live="polite">Шагайг бэлдэж байна…</p>
+      </section>
+      <button id="end-game" type="button" hidden>Тоглоом дуусгах</button>
+      <button id="new-game">Шинээр эхлэх</button>
+      <button id="switch-game" type="button" hidden>Тоглоом солих</button>
+    </aside>
+  </main>
+  <div class="start-screen" id="race-setup">
+    <section class="start-card">
+      <span class="eyebrow">ШАГАЙН НААДАМ</span><h2>Морь уралдуулах</h2><p>Өөрийн зүсний морийг барианд хүргээрэй.</p>
+      <label for="race-players">Тоглогчдын тоо</label><input id="race-players" type="number" min="1" max="12" value="2">
+      <label for="track-length">Замын урт</label>
+      <select id="track-length"><option value="12">12 шагай · Богино</option><option value="18" selected>18 шагай · Дунд</option><option value="24">24 шагай · Урт</option></select>
+      <button id="begin" class="primary" disabled>Шагайг ачаалж байна…</button><a class="other-game" href="index.html">Тоглоом сонгох</a>
+    </section>
+  </div>
+  <dialog id="end-game-confirmation" class="proverb-dialog">
+    <h2>Тоглоом дуусгах</h2>
+    <p>Та тоглоомыг дуусгахдаа итгэлтэй байна уу?</p>
+    <div class="end-game-actions"><button id="cancel-end-game" type="button">Үгүй</button><button id="confirm-end-game" class="primary" type="button">Тийм, дуусгах</button></div>
+  </dialog>
+  <div id="game-over" class="start-screen" hidden>
+    <section class="start-card game-over-card">
+      <span class="eyebrow">МОРЬ УРАЛДУУЛАХ</span>
+      <h2 id="game-over-title">Тоглоом дууслаа</h2>
+      <p id="game-over-message"></p>
+      <div id="game-over-standings" aria-label="Эцсийн байр"></div>
+      <button id="play-again" class="primary" type="button">Дахин тоглох</button>
+      <a class="other-game" href="index.html">Үндсэн цэс</a>
+    </section>
+  </div>
+  <dialog id="proverb-question" class="proverb-dialog">
       <h2>Зүйр цэцэн үгийн асуулт</h2>
       <p id="proverb-text"></p>
       <div id="proverb-choices" class="proverb-choices"></div>

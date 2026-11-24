@@ -12,6 +12,7 @@ function createHorseGame(roster, trackLength, publish, {
 } = {}) {
   const initialState = () => ({
     id: randomUUID(), hostId, gameType: 'horse', started: true, finished: false,
+    endReason: null,
     players: roster.map(p => ({ ...p, connected: true, position: 0, finished: false, hasThrown: false, facingForward: false })),
     trackLength, currentPlayerId: roster[0].id, currentSeat: roster[0].seat,
     turnNumber: 1, phase: 'ready', faces: [], lastThrow: null,
@@ -88,6 +89,7 @@ function createHorseGame(roster, trackLength, publish, {
       startedAt: Date.now(), animationEndsAt: Date.now() + animationMs
     };
     state.finished = state.ranking.length === state.players.length;
+    if (state.finished) state.endReason = 'finish';
     broadcast();
     const generation = state.id;
     animationTimer = setTimeout(() => {
@@ -108,6 +110,21 @@ function createHorseGame(roster, trackLength, publish, {
     for (const timer of disconnectTimers.values()) clearTimeout(timer);
     disconnectTimers.clear();
   }
+  function endGame(id, request) {
+    if (closed || state.finished || id !== state.hostId || request?.gameId !== state.id) {
+      return { ok: false, error: 'Only the host can end the active race.' };
+    }
+    clearTimeout(animationTimer);
+    for (const timer of disconnectTimers.values()) clearTimeout(timer);
+    disconnectTimers.clear();
+    state.finished = true;
+    state.endReason = state.ranking.length === 0 ? 'ended-early' : 'ended-by-host';
+    state.phase = 'ended';
+    state.currentPlayerId = null;
+    state.currentSeat = null;
+    broadcast();
+    return { ok: true };
+  }
   function restart() {
     const connections = new Map(state.players.map(p => [p.id, p.connected]));
     close();
@@ -121,7 +138,7 @@ function createHorseGame(roster, trackLength, publish, {
     broadcast();
     return state.id;
   }
-  return { snapshot, throwFor, setConnected, close, restart };
+  return { snapshot, throwFor, endGame, setConnected, close, restart };
 }
 
 module.exports = { createHorseGame };

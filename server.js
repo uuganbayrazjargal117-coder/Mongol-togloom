@@ -212,6 +212,13 @@ function createLobbyServer({ horseOptions, alagOptions } = {}) {
       const response = await horseGame.throwFor(socket.data.playerId, payload, () => socket.connected);
       if (socket.connected) reply(response);
     });
+    socket.on('horse:end', (payload, acknowledge) => {
+      const reply = typeof acknowledge === 'function' ? acknowledge : () => {};
+      if (!socket.connected || !players.has(socket.data.playerId) || !horseGame) {
+        return reply({ ok: false, error: 'You are not in an active horse race.' });
+      }
+      reply(horseGame.endGame(socket.data.playerId, payload));
+    });
     socket.on('disconnect', () => {
       const id = socket.data.playerId;
       if (!players.has(id)) return;

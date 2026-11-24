@@ -112,6 +112,45 @@ test('multiplayer server turns backward horses in place and restores facing/posi
   assert.equal(restoredState.players.find(p => p.id === guest.session.playerId).facingForward, true);
 });
 
+test('only the host can end a race; ended state synchronizes, restores, and resets cleanly', async t => {
+  const { host, guest, client } = await fixture(t, { animationMs: 20 });
+  const initialState = await startHorse(host);
+  const denied = await emit(guest, 'horse:end', request(initialState));
+  assert.equal(denied.ok, false);
+  assert.equal(host.horse.finished, false);
+  assert.equal(guest.horse.finished, false);
+
+  const endedOnGuest = horseState(guest, s => s?.phase === 'ended');
+  assert.equal((await emit(host, 'horse:end', request(initialState))).ok, true);
+  const ended = await endedOnGuest;
+  assert.deepEqual(ended, host.horse);
+  assert.equal(ended.finished, true);
+  assert.equal(ended.endReason, 'ended-early');
+  assert.equal(ended.currentPlayerId, null);
+  assert.deepEqual(ended.ranking, []);
+  assert.equal(ended.winnerId, null);
+  assert.ok(ended.players.every(player => player.position === 0));
+  assert.equal((await emit(host, 'horse:throw', request(ended))).ok, false);
+
+  const token = guest.session.token;
+  guest.disconnect();
+  const restored = await client(token);
+  const restoredState = await horseState(restored, s => s?.id === ended.id && s.finished);
+  assert.equal(restoredState.endReason, 'ended-early');
+  assert.deepEqual(restoredState.players, ended.players);
+
+  const restartedState = horseState(restored, s => s?.id !== ended.id);
+  assert.equal((await emit(host, 'game:restart', { gameId: ended.id })).ok, true);
+  const restarted = await restartedState;
+  assert.equal(restarted.finished, false);
+  assert.equal(restarted.endReason, null);
+  assert.deepEqual(restarted.ranking, []);
+  assert.equal(restarted.winnerId, null);
+  assert.ok(restarted.players.every(player =>
+    player.position === 0 && !player.finished && !player.hasThrown && !player.facingForward
+  ));
+});
+
 async function fixture(t, horseOptions) {
   const { httpServer, io } = createLobbyServer({ horseOptions });
   const clients = [];
@@ -217,6 +256,7 @@ test('Horse Racing lobby, authoritative throws, movement, turns and full ranking
         assert.equal(after.phase, 'ready');
       } else {
         assert.equal(after.finished, true); assert.equal(after.currentPlayerId, null);
+        assert.equal(after.endReason, 'finish');
         assert.deepEqual(after.ranking, [racer.session.playerId, guest.session.playerId]);
         assert.ok(after.players.every(p => p.finished && p.position === 12));
         assert.equal((await emit(guest, 'horse:throw', request(after))).ok, false);

@@ -9,7 +9,7 @@ const palette=['#ef3836','#f3d029','#3d8dde','#eb97b2','#318439','#191e58','#e45
 const names=['Морь','Тэмээ','Хонь','Ямаа'];
 // The two narrow sides are horse/camel; broad sides are sheep/goat.
 const sideAngles=[Math.PI/2,-Math.PI/2,0,Math.PI];
-let boneSurface,geometry,board,tray,racers=[],bones=[],track=new THREE.Group(),current=0,length=18,ranking=[],busy=false,active=false,throwMotion=null,moveMotion=null,turnMotion=null;
+let boneSurface,geometry,board,tray,racers=[],bones=[],track=new THREE.Group(),current=0,length=18,ranking=[],busy=false,active=false,throwMotion=null,moveMotion=null,turnMotion=null,localAnimation=null,localRun=0,localEndReason=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const multiplayerMode=new URLSearchParams(location.search).get('lan')==='1';
 let multiplayer=null,raceReady=false,networkBoardGame=null;
@@ -20,8 +20,44 @@ function showNetworkFaces(faces){
   if(f===0)label.style.color='#8a1726';return label;
  }));
 }
-function renderNetworkControls({state,playerId,canThrow,canRestart=false,canSwitch=false}){
+function renderGameOver({players,ranking,trackLength,endReason}){
+ const places=new Map(ranking.map((id,index)=>[String(id),index]));
+ const standings=[...players].sort((a,b)=>{
+  const placeA=places.get(String(a.id)),placeB=places.get(String(b.id));
+  if(placeA!==undefined||placeB!==undefined)return (placeA??Infinity)-(placeB??Infinity);
+  return b.position-a.position||a.seat-b.seat;
+ });
+ $('game-over-title').textContent=endReason==='finish'?'Уралдаан дууслаа':endReason==='ended-early'?'Уралдаан эрт дууслаа':'Тоглоом дууслаа';
+ $('game-over-message').textContent=endReason==='finish'
+  ?`Түрүүлсэн: ${standings.find(player=>places.has(String(player.id)))?.name??'—'}`
+  :endReason==='ended-early'?'Барианд хүрсэн морь байхгүй. Одоогийн байрлалыг харуулав.':'Тоглоомыг дуусгаж, одоогийн байрлалыг хадгаллаа.';
+ $('game-over-standings').replaceChildren(...standings.map(player=>{
+  const row=document.createElement('div');row.className='game-over-standing';
+  const name=document.createElement('span');name.textContent=player.name;
+  const place=places.get(String(player.id));
+  const position=document.createElement('strong');position.textContent=place!==undefined?`${place+1}-р байр · Барианд`:`${player.position} / ${trackLength}`;
+  row.append(name,position);return row;
+ }));
+ $('play-again').disabled=multiplayerMode&&!multiplayer?.canRestart();
+ $('game-over').hidden=false;
+}
+function showLocalGameOver(){
+ renderGameOver({
+  players:racers.map((r,i)=>({id:String(i),name:`Тоглогч ${i+1}`,position:r.position,seat:i})),
+  ranking:ranking.map(String),trackLength:length,endReason:localEndReason
+ });
+}
+function endLocalGame(){
+ if(!active)return;
+ active=false;localEndReason=ranking.length===0?'ended-early':'ended-by-player';localRun++;
+ localAnimation?.abort();localAnimation=null;cancelRaceAnimations();
+ $('throw').disabled=true;$('end-game').hidden=true;$('new-game').disabled=false;
+ update();showLocalGameOver();
+}
+function renderNetworkControls({state,playerId,canThrow,canRestart=false,canEnd=false,canSwitch=false}){
  $('throw').disabled=!canThrow;
+ $('end-game').hidden=!state||state.hostId!==playerId||state.finished;
+ $('end-game').disabled=!canEnd;
  if(state){$('switch-game').hidden=state.hostId!==playerId;$('switch-game').disabled=!canSwitch;}
  $('new-game').disabled=!canRestart;
  if(state)$('new-game').hidden=state.hostId!==playerId;
@@ -79,6 +115,8 @@ async function applyHorseState(state,{animate,signal}){
   ? 'Final ranking: '+state.ranking.map((id,i)=>`${i+1}. ${state.players.find(p=>p.id===id).name}`).join(' · ')
   : last?`${actor.name}: ${last.different?'Дөрвөн бэрх!':last.horses+' морь'} · +${last.steps} · ${last.position} / ${length}`
   : 'Waiting for the current player to throw.';
+ if(state.finished)renderGameOver({players:state.players,ranking:state.ranking,trackLength:state.trackLength,endReason:state.endReason});
+ else $('game-over').hidden=true;
 }
 function surface(id){
  const host=$(id),scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-10,10,6,-6,.1,100);
@@ -103,14 +141,46 @@ function makeBoard(n,seats){clearTrack();racers=Array.from({length:n},(_,i)=>({p
  group.position.set(xAt(0),.43,z);group.rotation.y=Math.PI*1.5;track.add(group);r.mesh=group;const label=textSprite(String(seats?.[i]??i+1),r.color);label.position.set(xAt(0)-1.05,.05,z);track.add(label);});
  const finish=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(xAt(length)+.55,.01,-Math.ceil(n/2)*.62-.4),new THREE.Vector3(xAt(length)+.55,.01,Math.ceil(n/2)*.62+.4)]),new THREE.LineBasicMaterial({color:0x79543b}));track.add(finish);resize();}
 function update(){ $('turn').textContent=active?`Тоглогч ${current+1}`:'Тоглоом дууслаа';$('race-scores').replaceChildren(...racers.map((r,i)=>{const row=document.createElement('div');row.className='race-score'+(active&&i===current?' active':'');const name=document.createElement('span');name.className='player-name';const dot=document.createElement('i');dot.className='swatch';dot.style.background=r.color;name.append(dot,document.createTextNode(`Тоглогч ${i+1}`));const score=document.createElement('strong');score.textContent=r.finished?`${ranking.indexOf(i)+1}-р байр`:`${r.position} / ${length}`;row.append(name,score);return row;}));racers.forEach((r,i)=>{r.mesh.children[0].material.emissive.setHex(0);r.outline.visible=i===current&&active;});}
-function start(){if(multiplayerMode||busy)return;let n=Math.max(1,Math.min(12,Math.floor(Number($('race-players').value)||2)));$('race-players').value=n;length=Number($('track-length').value);ranking=[];current=0;active=true;makeBoard(n);bones.forEach((m,i)=>{m.position.set((1.5-i)*1.28,.5,0);m.rotation.set(0,0,sideAngles[i]);});$('face-labels').replaceChildren(...names.map(name=>{const label=document.createElement('span');label.textContent=name;return label;}));$('track-label').textContent=`${length} шагайн зам`;$('race-setup').hidden=true;$('throw').disabled=false;$('result').textContent='Дөрвөн шагай хаяж уралдаарай.';update();}
+function start(){if(multiplayerMode||busy)return;let n=Math.max(1,Math.min(12,Math.floor(Number($('race-players').value)||2)));$('race-players').value=n;length=Number($('track-length').value);ranking=[];current=0;active=true;localRun++;localEndReason=null;$('game-over').hidden=true;$('end-game').hidden=false;$('end-game').disabled=false;makeBoard(n);bones.forEach((m,i)=>{m.position.set((1.5-i)*1.28,.5,0);m.rotation.set(0,0,sideAngles[i]);});$('face-labels').replaceChildren(...names.map(name=>{const label=document.createElement('span');label.textContent=name;return label;}));$('track-label').textContent=`${length} шагайн зам`;$('race-setup').hidden=true;$('throw').disabled=false;$('result').textContent='Дөрвөн шагай хаяж уралдаарай.';update();}
 function next(){if(busy||!active)return;do{current=(current+1)%racers.length;}while(racers[current].finished);$('throw').disabled=false;update();$('throw').focus();}
 function animateThrow(faces){return new Promise(resolve=>{throwMotion={start:performance.now(),duration:THROW_DURATION,faces,resolve};});}
 function animateTurn(horse){return new Promise(resolve=>{turnMotion={start:performance.now(),duration:reduced?150:700,horse,from:horse.mesh.rotation.y,to:horse.mesh.rotation.y+Math.PI,resolve};});}
 async function animateHorse(horse,target,signal){const fromPosition=target.fromPosition??horse.position;if(target.turnedForward)await animateTurn(horse);if(signal?.aborted||!hasHorseMovement(fromPosition,target.position))return;return new Promise(resolve=>{moveMotion={start:performance.now(),duration:reduced?150:800,horse,from:xAt(fromPosition),to:xAt(target.position),resolve};});}
-async function roll(){if(multiplayerMode){multiplayer?.requestThrow();return;}if(!active||busy)return;busy=true;$('throw').disabled=true;$('new-game').disabled=true;$('result').textContent='Дөрвөн шагай хаяж байна…';$('face-labels').replaceChildren(...names.map(()=>{let s=document.createElement('span');s.textContent='…';return s;}));const faces=Array.from({length:4},()=>Math.floor(Math.random()*4));await playShagaiSound();await animateThrow(faces);$('face-labels').replaceChildren(...faces.map(f=>{const s=document.createElement('span');s.textContent=names[f];if(f===0)s.style.color='#8a1726';return s;}));const r=racers[current],result=advance(r,faces,length);await animateHorse(r,result);r.position=result.position;r.hasThrown=true;r.facingForward=result.facingForward;let message=`Тоглогч ${current+1}: `+(result.different?'Дөрвөн бэрх! 4 алхам.':result.firstThrow?`${result.horses} морь · эхний хаялт.`:`${result.horses} морь буулаа.`);if(result.steps===0)message+=' Байрандаа үлдэнэ.';else message+=` ${r.position} / ${length} шагай.`;
- if(r.position===length){r.finished=true;ranking.push(current);message=`Тоглогч ${current+1} ${ranking.length}-р байранд барианд орлоо!`;}if(ranking.length===racers.length){active=false;message+=` Тоглоом дууслаа. Түрүү: Тоглогч ${ranking[0]+1}.`;}busy=false;$('new-game').disabled=false;$('result').textContent=message;update();if(active)next();}
-$('begin').onclick=start;$('throw').onclick=roll;$('new-game').onclick=()=>{if(multiplayerMode){multiplayer?.requestRestart();return;}if(!busy)$('race-setup').hidden=false;};$('rules').onclick=()=>$('race-help').showModal();$('close-help').onclick=()=>$('race-help').close();
+function cancelRaceAnimations(){const oldThrow=throwMotion,oldMove=moveMotion,oldTurn=turnMotion;throwMotion=null;moveMotion=null;turnMotion=null;oldThrow?.resolve();oldMove?.resolve();oldTurn?.resolve();busy=false;}
+async function roll(){
+ if(multiplayerMode){multiplayer?.requestThrow();return;}
+ if(!active||busy)return;
+ const generation=localRun,animation=new AbortController();localAnimation=animation;
+ busy=true;$('throw').disabled=true;$('new-game').disabled=true;$('result').textContent='Дөрвөн шагай хаяж байна…';
+ $('face-labels').replaceChildren(...names.map(()=>{const label=document.createElement('span');label.textContent='…';return label;}));
+ try{
+  const faces=Array.from({length:4},()=>Math.floor(Math.random()*4));
+  await playShagaiSound();
+  if(animation.signal.aborted||generation!==localRun)return;
+  await animateThrow(faces);
+  if(animation.signal.aborted||generation!==localRun)return;
+  $('face-labels').replaceChildren(...faces.map(f=>{const label=document.createElement('span');label.textContent=names[f];if(f===0)label.style.color='#8a1726';return label;}));
+  const racer=racers[current],result=advance(racer,faces,length);
+  await animateHorse(racer,result,animation.signal);
+  if(animation.signal.aborted||generation!==localRun)return;
+  racer.position=result.position;racer.hasThrown=true;racer.facingForward=result.facingForward;
+  let message=`Тоглогч ${current+1}: `+(result.different?'Дөрвөн бэрх! 4 алхам.':result.firstThrow?`${result.horses} морь · эхний хаялт.`:`${result.horses} морь буулаа.`);
+  if(result.steps===0)message+=' Байрандаа үлдэнэ.';else message+=` ${racer.position} / ${length} шагай.`;
+  if(racer.position===length){racer.finished=true;ranking.push(current);message=`Тоглогч ${current+1} ${ranking.length}-р байранд барианд орлоо!`;}
+  if(ranking.length===racers.length){active=false;localEndReason='finish';$('end-game').hidden=true;message+=` Тоглоом дууслаа. Түрүү: Тоглогч ${ranking[0]+1}.`;}
+  $('result').textContent=message;update();
+  if(localEndReason==='finish')showLocalGameOver();else if(active){busy=false;next();}
+ }finally{
+  if(localAnimation===animation)localAnimation=null;
+  if(generation===localRun){busy=false;$('new-game').disabled=false;$('throw').disabled=!active;}
+ }
+}
+$('begin').onclick=start;$('throw').onclick=roll;$('new-game').onclick=()=>{if(multiplayerMode){multiplayer?.requestRestart();return;}if(!busy)$('race-setup').hidden=false;};
+$('end-game').onclick=()=>{if(multiplayerMode?multiplayer?.canEnd():active)$('end-game-confirmation').showModal();};
+$('cancel-end-game').onclick=()=>$('end-game-confirmation').close();
+$('confirm-end-game').onclick=()=>{$('end-game-confirmation').close();if(multiplayerMode)multiplayer?.requestEnd();else endLocalGame();};
+$('play-again').onclick=()=>{if(multiplayerMode){multiplayer?.requestRestart();return;}$('game-over').hidden=true;$('race-setup').hidden=false;};
+$('rules').onclick=()=>$('race-help').showModal();$('close-help').onclick=()=>$('race-help').close();
 function makeBoneSurface(){
   const size=128,color=new Uint8Array(size*size*4),bump=new Uint8Array(size*size*4);
   let seed=108;const random=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296;};
@@ -133,7 +203,7 @@ async function init(){try{const response=await fetch('./race-bone.json');if(!res
 if(multiplayerMode){
  $('race-setup').hidden=true;$('new-game').disabled=true;
  $('result').textContent='Connecting to Horse Racing...';
- if(typeof io==='function'){multiplayer=createHorseMultiplayer({applyState:applyHorseState,renderControls:renderNetworkControls,cancelAnimations:()=>{const oldThrow=throwMotion,oldMove=moveMotion,oldTurn=turnMotion;throwMotion=null;moveMotion=null;turnMotion=null;oldThrow?.resolve();oldMove?.resolve();oldTurn?.resolve();busy=false;},onStatus:text=>{$('result').textContent=text;}});mountGameSwitch(multiplayer);}
+ if(typeof io==='function'){multiplayer=createHorseMultiplayer({applyState:applyHorseState,renderControls:renderNetworkControls,cancelAnimations:cancelRaceAnimations,onStatus:text=>{$('result').textContent=text;}});mountGameSwitch(multiplayer);}
  else $('result').textContent='Server unavailable. Open the race through the multiplayer lobby.';
 }
 setupHandThrow({noun:'шагай',canThrow:()=>multiplayerMode?Boolean(multiplayer?.canThrow()):active&&!busy&&$('race-setup').hidden,throwDice:roll});
