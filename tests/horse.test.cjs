@@ -66,13 +66,23 @@ test('four-berkh remains distinct from four horses and keeps its four-space bonu
 test('horse age ranges convert to selectable distances, curved paths, titles and foal finish message', async () => {
   const {
     HORSE_AGE_CATEGORIES, horseTrackOptions, isValidHorseRaceSelection,
-    buildHorseTrackPath, finishTitle, foalLastPlaceAnnouncement
+    buildHorseTrackPath, finishTitle, foalLastPlaceAnnouncement,
+    HORSE_TRACK_SPACING, HORSE_TRACK_MARKER_SCALE, HORSE_TRACK_CAMERA_HEIGHT,
+    horseTrackCameraFrame
   } = await import('../race-logic.mjs');
   const ranges = {
     azarga: [44, 46, 48], 'ikh-nas': [48, 50, 52], soyolon: [36, 38, 40],
     hyzaalan: [30, 32, 34], shudlen: [24, 26, 28], daaga: [20, 22, 24]
   };
   assert.equal(HORSE_AGE_CATEGORIES.length, 6);
+  assert.equal(HORSE_TRACK_SPACING, 1);
+  assert.equal(HORSE_TRACK_MARKER_SCALE, 1.05);
+  assert.equal(HORSE_TRACK_CAMERA_HEIGHT, 13);
+  const fixedFrames = [20, 24, 28, 34, 40, 48, 52].map(() => horseTrackCameraFrame(1.6));
+  assert.ok(fixedFrames.every(frame => frame.width === 20.8 && frame.height === 13));
+  assert.throws(() => horseTrackCameraFrame(0), RangeError);
+  const shortTrack = buildHorseTrackPath(20), longTrack = buildHorseTrackPath(52);
+  assert.ok(longTrack.at(-1).x - longTrack[0].x > shortTrack.at(-1).x - shortTrack[0].x);
   for (const [category, distances] of Object.entries(ranges)) {
     const options = horseTrackOptions(category);
     assert.deepEqual(options.map(option => option.trackLength), distances);
@@ -83,8 +93,11 @@ test('horse age ranges convert to selectable distances, curved paths, titles and
       assert.equal(path.length, option.trackLength + 1);
       assert.ok(path[0].x < path.at(-1).x);
       assert.ok(Math.abs(path[0].z - path.at(-1).z) < 1e-10);
+      const verticalDirections = path.slice(1).map((point, index) => Math.sign(point.z - path[index].z)).filter(Boolean);
+      const curveChanges = verticalDirections.slice(1).filter((direction, index) => direction !== verticalDirections[index]).length;
+      assert.ok(curveChanges >= 2, `${option.trackLength}-space track should include multiple S-curves`);
       for (let i = 1; i < path.length; i++) {
-        assert.ok(Math.abs(Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z) - 1) < 1e-10);
+        assert.ok(Math.abs(Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z) - HORSE_TRACK_SPACING) < 1e-10);
       }
       if (option.trackLength > 24) assert.ok(Math.max(...path.map(point => point.z)) > Math.min(...path.map(point => point.z)));
     }

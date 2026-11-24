@@ -4,7 +4,8 @@ import {playShagaiSound, THROW_DURATION} from './shagai-audio.js';
 import {setupHandThrow} from './hand-throw.js';
 import {
  advance,hasHorseMovement,HORSE_AGE_CATEGORIES,horseTrackOptions,isValidHorseRaceSelection,
- finishTitle,foalLastPlaceAnnouncement,buildHorseTrackPath
+ finishTitle,foalLastPlaceAnnouncement,buildHorseTrackPath,
+ HORSE_TRACK_MARKER_SCALE,horseTrackCameraFrame
 } from './race-logic.mjs';
 import {createHorseMultiplayer} from './race-multiplayer.mjs';
 const $=id=>document.getElementById(id);
@@ -12,7 +13,7 @@ const palette=['#ef3836','#f3d029','#3d8dde','#eb97b2','#318439','#191e58','#e45
 const names=['Морь','Тэмээ','Хонь','Ямаа'];
 // The two narrow sides are horse/camel; broad sides are sheep/goat.
 const sideAngles=[Math.PI/2,-Math.PI/2,0,Math.PI];
-let boneSurface,geometry,board,tray,racers=[],bones=[],track=new THREE.Group(),trackPath=[],horseCategory=null,current=0,length=18,ranking=[],busy=false,active=false,throwMotion=null,moveMotion=null,turnMotion=null,localAnimation=null,localRun=0,localEndReason=null;
+let boneSurface,geometry,board,tray,racers=[],bones=[],track=new THREE.Group(),trackPath=[],horseCategory=null,current=0,length=18,ranking=[],busy=false,active=false,throwMotion=null,moveMotion=null,turnMotion=null,localAnimation=null,localRun=0,localEndReason=null,cameraFocus={x:0,z:0},followCamera=true;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const multiplayerMode=new URLSearchParams(location.search).get('lan')==='1';
 let multiplayer=null,raceReady=false,networkBoardGame=null;
@@ -146,16 +147,29 @@ function surface(id){
  return {host,scene,camera,renderer};
 }
 function fit(view,width,height,centerX=0,centerZ=0){const ratio=view.host.clientWidth/view.host.clientHeight;const w=Math.max(width,height*ratio),h=w/ratio;Object.assign(view.camera,{left:-w/2,right:w/2,top:h/2,bottom:-h/2});view.camera.position.set(centerX,30,centerZ);view.camera.lookAt(centerX,0,centerZ);view.camera.updateProjectionMatrix();view.renderer.setSize(view.host.clientWidth,view.host.clientHeight);}
+function frameBoard(){
+ const {width,height}=horseTrackCameraFrame(board.host.clientWidth/board.host.clientHeight);
+ Object.assign(board.camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});
+ board.camera.position.set(cameraFocus.x,30,cameraFocus.z);board.camera.lookAt(cameraFocus.x,0,cameraFocus.z);
+ board.camera.updateProjectionMatrix();board.renderer.setSize(board.host.clientWidth,board.host.clientHeight);
+}
 function resize(){
  if(!board)return;
- let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
- const laneExtent=Math.max(.65,...racers.map(r=>Math.abs(r.lane)));
- for(let i=0;i<trackPath.length;i++){
-  for(const lane of [-laneExtent-.8,laneExtent+.8]){
-   const point=trackPoint(i,lane);minX=Math.min(minX,point.x);maxX=Math.max(maxX,point.x);minZ=Math.min(minZ,point.z);maxZ=Math.max(maxZ,point.z);
-  }
+ frameBoard();fit(tray,5.5,2.2);
+}
+function setFollowCamera(enabled){
+ followCamera=enabled;
+ const button=$('follow-camera');
+ button.setAttribute('aria-pressed',String(enabled));
+ button.textContent=enabled?'Морийг дагах камер: асаалттай':'Морийг дагах камер: унтраалттай';
+ if(enabled&&racers[current]?.mesh){cameraFocus.x=racers[current].mesh.position.x;cameraFocus.z=racers[current].mesh.position.z;}
+}
+function followCurrentHorse(){
+ if(followCamera&&racers[current]?.mesh){
+  const position=racers[current].mesh.position;
+  cameraFocus.x+=(position.x-cameraFocus.x)*.08;cameraFocus.z+=(position.z-cameraFocus.z)*.08;
  }
- fit(board,Math.max(5,maxX-minX+2),Math.max(4,maxZ-minZ+2),(minX+maxX)/2,(minZ+maxZ)/2);fit(tray,5.5,2.2);
+ board.camera.position.set(cameraFocus.x,30,cameraFocus.z);board.camera.lookAt(cameraFocus.x,0,cameraFocus.z);
 }
 function bone(color,scale=1){const mesh=new THREE.Mesh(geometry,new THREE.MeshPhysicalMaterial({color,vertexColors:true,map:boneSurface.color,bumpMap:boneSurface.bump,bumpScale:.007,roughness:.5,metalness:0,clearcoat:.13,clearcoatRoughness:.42}));mesh.castShadow=true;mesh.receiveShadow=true;mesh.scale.setScalar(scale);return mesh;}
 function textSprite(text,color='#503528'){const c=document.createElement('canvas');c.width=256;c.height=96;const cx=c.getContext('2d');cx.font='bold 44px sans-serif';cx.textAlign='center';cx.fillStyle=color;cx.fillText(text,128,62);const texture=new THREE.CanvasTexture(c),m=new THREE.SpriteMaterial({map:texture,transparent:true,toneMapped:false});const s=new THREE.Sprite(m);s.scale.set(1.45,.55,1);return s;}
@@ -187,7 +201,7 @@ function makeBoard(n,seats){
  racers=Array.from({length:n},(_,i)=>({position:0,finished:false,hasThrown:false,facingForward:false,color:palette[i],lane:(i%2===0?-1:1)*(.60+Math.floor(i/2)*.62)}));
  const laneExtent=Math.max(.65,...racers.map(r=>Math.abs(r.lane)));
  for(let j=1;j<=length;j++){
-  const marker=trackPoint(j),m=bone('#286c78',1.05);m.rotation.set(0,facingRotation(j,true),sideAngles[0]);m.position.set(marker.x,.35,marker.z);track.add(m);
+  const marker=trackPoint(j),m=bone('#286c78',HORSE_TRACK_MARKER_SCALE);m.rotation.set(0,facingRotation(j,true),sideAngles[0]);m.position.set(marker.x,.35,marker.z);track.add(m);
   if(j%3===0||j===length){const labelPoint=trackPoint(j,laneExtent+.75),s=textSprite(String(j));s.position.set(labelPoint.x,.05,labelPoint.z);track.add(s);}
  }
  racers.forEach((r,i)=>{
@@ -199,7 +213,8 @@ function makeBoard(n,seats){
   const label=textSprite(String(seats?.[i]??i+1),r.color);label.position.set(start.x-Math.cos(heading)*1.05,.05,start.z-Math.sin(heading)*1.05);track.add(label);
  });
  const finishStart=trackPoint(length,-laneExtent-.45),finishEnd=trackPoint(length,laneExtent+.45);
- const finish=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(finishStart.x,.01,finishStart.z),new THREE.Vector3(finishEnd.x,.01,finishEnd.z)]),new THREE.LineBasicMaterial({color:0x79543b}));track.add(finish);resize();
+ const finish=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(finishStart.x,.01,finishStart.z),new THREE.Vector3(finishEnd.x,.01,finishEnd.z)]),new THREE.LineBasicMaterial({color:0x79543b}));track.add(finish);
+ const followed=racers[current]??racers[0];cameraFocus.x=followed.mesh.position.x;cameraFocus.z=followed.mesh.position.z;resize();
 }
 function update(){
  $('turn').textContent=active?`Тоглогч ${current+1}`:'Тоглоом дууслаа';
@@ -258,6 +273,7 @@ async function roll(){
  }
 }
 $('begin').onclick=start;$('throw').onclick=roll;$('new-game').onclick=()=>{if(multiplayerMode){multiplayer?.requestRestart();return;}if(!busy)$('race-setup').hidden=false;};
+$('follow-camera').onclick=()=>setFollowCamera(!followCamera);
 $('end-game').onclick=()=>{if(multiplayerMode?multiplayer?.canEnd():active)$('end-game-confirmation').showModal();};
 $('cancel-end-game').onclick=()=>$('end-game-confirmation').close();
 $('confirm-end-game').onclick=()=>{$('end-game-confirmation').close();if(multiplayerMode)multiplayer?.requestEnd();else endLocalGame();};
@@ -293,7 +309,7 @@ async function init(){try{const response=await fetch('./race-bone.json');if(!res
   a.horse.mesh.rotation.y=facingRotation(a.fromPosition+(a.toPosition-a.fromPosition)*e,true);
   if(t===1){moveMotion=null;a.resolve();}
  }
- board.renderer.render(board.scene,board.camera);tray.renderer.render(tray.scene,tray.camera);requestAnimationFrame(frame);}requestAnimationFrame(frame);return true;
+ followCurrentHorse();board.renderer.render(board.scene,board.camera);tray.renderer.render(tray.scene,tray.camera);requestAnimationFrame(frame);}requestAnimationFrame(frame);return true;
  }catch(e){console.error(e);$('loading').textContent='3D дүрслэл ачаалсангүй. Хуудсыг дахин нээнэ үү.';$('begin').textContent='Ачаалж чадсангүй';}}
 if(multiplayerMode){
  $('race-setup').hidden=true;$('new-game').disabled=true;

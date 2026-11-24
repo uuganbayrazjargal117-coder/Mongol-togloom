@@ -7,6 +7,17 @@ export const HORSE_AGE_CATEGORIES = Object.freeze([
   { id: 'daaga', name: 'Даага', minKm: 10, maxKm: 12 }
 ].map(Object.freeze));
 
+export const HORSE_TRACK_SPACING = 1;
+export const HORSE_TRACK_MARKER_SCALE = 1.05;
+export const HORSE_TRACK_CAMERA_HEIGHT = 13;
+
+export function horseTrackCameraFrame(aspectRatio) {
+  if (!Number.isFinite(aspectRatio) || aspectRatio <= 0) {
+    throw new RangeError('Camera aspect ratio must be positive.');
+  }
+  return { width: HORSE_TRACK_CAMERA_HEIGHT * aspectRatio, height: HORSE_TRACK_CAMERA_HEIGHT };
+}
+
 const placeNumbers = Object.freeze([
   '', '', '', 'гурав', 'дөрөв', 'тав', 'зургаа', 'долоо',
   'найм', 'ес', 'арав', 'арван нэг', 'арван хоёр'
@@ -41,14 +52,15 @@ export function foalLastPlaceAnnouncement(categoryId, finishOrder, playerCount, 
   return 'Энэ тоглолтын баян ходоод, ирэх тоглолтын түрүү магнай!';
 }
 
-export function buildHorseTrackPath(length, spacing = 1) {
+export function buildHorseTrackPath(length, spacing = HORSE_TRACK_SPACING) {
   if (!Number.isInteger(length) || length < 1 || !Number.isFinite(spacing) || spacing <= 0) {
     throw new RangeError('Track length and spacing must be positive.');
   }
-  const bend = length > 24 ? Math.min(0.32, 0.12 + (length - 24) * 0.005) : 0;
+  const curves = Math.max(2, Math.round(length / 10));
+  const bend = 0.52;
   const points = [{ x: 0, z: 0 }];
   for (let step = 1; step <= length; step++) {
-    const angle = bend * Math.sin(2 * Math.PI * (step - 0.5) / length);
+    const angle = bend * Math.sin(2 * Math.PI * curves * (step - 0.5) / length);
     const previous = points[step - 1];
     points.push({
       x: previous.x + spacing * Math.cos(angle),
@@ -56,9 +68,7 @@ export function buildHorseTrackPath(length, spacing = 1) {
     });
   }
   const centerX = (points[0].x + points[length].x) / 2;
-  const minZ = Math.min(...points.map(point => point.z));
-  const maxZ = Math.max(...points.map(point => point.z));
-  const centerZ = (minZ + maxZ) / 2;
+  const centerZ = (Math.min(...points.map(point => point.z)) + Math.max(...points.map(point => point.z))) / 2;
   return points.map(point => ({ x: point.x - centerX, z: point.z - centerZ }));
 }
 
